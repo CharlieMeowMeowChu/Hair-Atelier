@@ -10,6 +10,7 @@
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
+| 本機 Chromium browser smoke | PASS | 2026-10-27：以 430×932 headless Chromium 載入 canvas；重載後 Service Worker controller 存在、favicon 存在，無 page error／console error；這不是 Safari 真機證據 |
 | 觸控界面實作 | IMPLEMENTED | `pointerdown/move/up/cancel` 旋轉 3D 畫面；畫面與按鈕有 touch-action 限制 |
 | 自由檢視手勢 | IMPLEMENTED | 單指可水平旋轉與上下傾斜；兩指 pinch 可在 0.72–2.2 m 相機距離內縮放；尚未真機驗證手勢細節 |
 | 觸控剪／捲／增長原型 | IMPLEMENTED | 剪刀以畫面取樣命中並累積拖掃最低弧長，放手才 Cut；捲髮器對命中束的局部區間建立 Curl；增髮只對點按的髮束 Grow；Undo／Redo／重設可用 |
@@ -29,7 +30,7 @@
 | 靜止耗電控制 | IMPLEMENTED | 取消永久 animation loop；旋轉、選取、資料更新或 resize 時才要求下一幀渲染 |
 | 技術 overlay | IMPLEMENTED | 即時顯示 selected strand ID、實際弧長、curl radius/pitch、cut preview 弧長及 geometry rebuild 毫秒數 |
 | 局部幾何更新 | IMPLEMENTED | renderer 保留各 GuideStrand 的 Line；只替換資料 signature 改變的 geometry，並在 overlay 顯示本次 rebuild 髮束數；移除的髮束會釋放 geometry/material |
-| PWA 基礎 | IMPLEMENTED | manifest；service worker 導航採 network-first、靜態資源 stale-while-revalidate，啟用時清理舊版本 cache；`node --check` 通過，未做離線真機驗證 |
+| PWA 基礎 | IMPLEMENTED | manifest、內建 SVG app icon／favicon；service worker 導航採 network-first、靜態資源 stale-while-revalidate，啟用時清理舊版本 cache；`node --check` 通過，未做離線真機驗證 |
 | 本機儲存／讀取 | IMPLEMENTED | 每次有效髮型操作與 Undo／Redo 寫入 versioned localStorage；現行存檔包含當前狀態及最多 20 步 Undo／Redo 歷史，讀取會驗證每個 history snapshot；舊的單一 HairState 存檔可遷移讀取；未做 Safari 重開真機驗證 |
 
 ## 尚未通過／未聲稱完成
