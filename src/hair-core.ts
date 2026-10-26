@@ -142,7 +142,11 @@ export class HairEditor {
     const length = Math.min(strand.maximumLength, strand.length + deltaArcLengthMeters);
     if (length === strand.length) return { changed: false, reason: 'At maximum recorded length', strandId };
     this.saveUndo();
-    this.state = replaceStrand(this.state, { ...strand, length });
+    const lastCurl = strand.curls.at(-1);
+    const curls = lastCurl && length > lastCurl.endS && lastCurl.endS >= strand.length
+      ? [...strand.curls.slice(0, -1), { ...lastCurl, endS: length }]
+      : strand.curls;
+    this.state = replaceStrand(this.state, { ...strand, length, curls });
     return { changed: true, strandId, oldLength: strand.length, newLength: length };
   }
 
@@ -175,7 +179,7 @@ export function createDemoHairState(): HairState {
     schemaVersion: 1,
     strands: Object.entries(roots).map(([id, root]) => ({
       id, root, direction: [0, -1, 0], length: id === 'C' ? 0.4 : 0.3,
-      maximumLength: id === 'C' ? 0.4 : 0.3, curls: [],
+      maximumLength: id === 'C' ? 0.6 : 0.45, curls: [],
     })),
   };
 }

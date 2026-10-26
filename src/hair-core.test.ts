@@ -140,4 +140,20 @@ describe('HairEditor core invariants', () => {
     expect(positivePoint[0]).toBeCloseTo(negativePoint[0]);
     expect(positivePoint[2] - positiveStrand.root[2]).toBeCloseTo(-(negativePoint[2] - negativeStrand.root[2]));
   });
+
+  it('extends curl parameters continuously only after restoring the recorded tip', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0, direction: 1 });
+    const original = editor.exportState().strands.find((item) => item.id === 'C')!;
+    const oldCurlSample = pointAt(original, 0.16);
+    editor.cutAt('C', 0.2);
+    editor.growBy('C', 0.25);
+    const grown = editor.exportState().strands.find((item) => item.id === 'C')!;
+    expect(grown.length).toBeCloseTo(0.45);
+    expect(grown.curls[0].endS).toBeCloseTo(0.45);
+    const justAfterFormerTip = pointAt(grown, 0.4001);
+    const atFormerTip = pointAt(grown, 0.4);
+    expect(Math.hypot(justAfterFormerTip[0] - atFormerTip[0], justAfterFormerTip[2] - atFormerTip[2])).toBeGreaterThan(0);
+    expect(oldCurlSample).toEqual(pointAt(grown, 0.16));
+  });
 });
