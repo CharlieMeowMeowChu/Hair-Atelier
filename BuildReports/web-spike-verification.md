@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| CoreHair 單元測試 | PASS | Vitest：1 test file、6 tests passed；測 Cut 只改目標束、Curl→Cut 保留前綴 ≤0.5 mm、Grow 不拉直舊捲、Undo/Redo、無效 Cut no-op、多束拖掃以單一 Undo 還原 |
+| CoreHair 單元測試 | PASS | Vitest：1 test file、10 tests passed；包括局部 Cut、Curl→Cut ≤0.5 mm、Grow 保捲、多束單一 Undo、連剪不倒長、固定髮根、20 步 Undo、越界 Curl no-op |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |

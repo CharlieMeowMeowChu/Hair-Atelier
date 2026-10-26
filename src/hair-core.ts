@@ -128,6 +128,7 @@ export class HairEditor {
       return { changed: false, reason: 'Invalid curl', strandId };
     }
     const limited = { ...curl, endS: Math.min(curl.endS, strand.length) };
+    if (limited.startS >= limited.endS) return { changed: false, reason: 'Curl range is outside current strand', strandId };
     this.saveUndo();
     this.state = replaceStrand(this.state, { ...strand, curls: [limited] });
     return { changed: true, strandId, oldLength: strand.length, newLength: strand.length };

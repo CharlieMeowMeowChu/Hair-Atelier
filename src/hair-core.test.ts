@@ -71,4 +71,47 @@ describe('HairEditor core invariants', () => {
     editor.undo();
     expect(canonicalState(editor.exportState())).toBe(initial);
   });
+
+  it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
+    const editor = new HairEditor(createDemoHairState());
+    let previousLength = 0.3;
+    for (let index = 0; index < 10; index += 1) {
+      const requested = 0.29 - index * 0.02;
+      const result = editor.cutAt('A', requested);
+      expect(result.changed).toBe(true);
+      expect(result.newLength).toBeLessThan(previousLength);
+      previousLength = result.newLength!;
+    }
+    expect(editor.cutAt('A', previousLength).changed).toBe(false);
+  });
+
+  it('keeps the root fixed through curl, cut, growth, undo and redo', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const root = editor.exportState().strands.find((strand) => strand.id === 'C')!.root;
+    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0 });
+    editor.cutAt('C', 0.2);
+    editor.growBy('C', 0.1);
+    editor.undo();
+    editor.redo();
+    expect(editor.exportState().strands.find((strand) => strand.id === 'C')!.root).toEqual(root);
+  });
+
+  it('supports twenty consecutive undo operations', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const initial = canonicalState(editor.exportState());
+    for (let index = 0; index < 20; index += 1) editor.cutAt('C', 0.39 - index * 0.01);
+    for (let index = 0; index < 20; index += 1) editor.undo();
+    expect(canonicalState(editor.exportState())).toBe(initial);
+  });
+
+  it('rejects a curl range entirely beyond the current tip without adding undo state', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.cutAt('C', 0.2);
+    const before = canonicalState(editor.exportState());
+    const result = editor.curlRange('C', { startS: 0.25, endS: 0.35, radius: 0.025, pitch: 0.08, phase: 0 });
+    expect(result.changed).toBe(false);
+    expect(canonicalState(editor.exportState())).toBe(before);
+    editor.undo();
+    expect(editor.exportState().strands.find((strand) => strand.id === 'C')?.length).toBe(0.4);
+  });
 });
