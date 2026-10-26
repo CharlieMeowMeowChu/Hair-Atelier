@@ -15,9 +15,16 @@ export interface GuideStrand {
   readonly direction: Vec3;
   readonly partingOffset?: Vec3;
   readonly earTuck?: 'left' | 'right';
+  readonly tie?: HairTie;
   readonly length: number;
   readonly maximumLength: number;
   readonly curls: readonly CurlSegment[];
+}
+
+export interface HairTie {
+  readonly id: string;
+  readonly anchor: Vec3;
+  readonly gatherS: number;
 }
 
 export interface HairState {
@@ -66,6 +73,7 @@ export function parseHairState(serialized: string): HairState | undefined {
       return typeof candidate.id === 'string' && candidate.id.length > 0 && vectorIsValid(candidate.root) && vectorIsValid(candidate.direction) &&
         (candidate.partingOffset === undefined || vectorIsValid(candidate.partingOffset)) &&
         (candidate.earTuck === undefined || candidate.earTuck === 'left' || candidate.earTuck === 'right') &&
+        (candidate.tie === undefined || typeof candidate.tie.id === 'string' && vectorIsValid(candidate.tie.anchor) && Number.isFinite(candidate.tie.gatherS) && candidate.tie.gatherS > 0) &&
         Number.isFinite(candidate.length) && Number.isFinite(candidate.maximumLength) && candidate.length! >= 0 && candidate.maximumLength! >= candidate.length! &&
         Array.isArray(candidate.curls) && candidate.curls.every((curl) => curl && Number.isFinite(curl.startS) && Number.isFinite(curl.endS) &&
           Number.isFinite(curl.radius) && Number.isFinite(curl.pitch) && Number.isFinite(curl.phase) && curl.startS >= 0 && curl.endS > curl.startS &&
@@ -77,7 +85,7 @@ export function parseHairState(serialized: string): HairState | undefined {
   }
 }
 
-export function pointAt(strand: GuideStrand, s: number): Vec3 {
+function pointWithoutTie(strand: GuideStrand, s: number): Vec3 {
   const clampedS = Math.max(0, Math.min(s, strand.length));
   const partingOffset = strand.partingOffset ?? [0, 0, 0] as Vec3;
   const base: [number, number, number] = [
@@ -100,6 +108,21 @@ export function pointAt(strand: GuideStrand, s: number): Vec3 {
     base[2] += 0.055 * ease;
   }
   return base;
+}
+
+export function pointAt(strand: GuideStrand, s: number): Vec3 {
+  const clampedS = Math.max(0, Math.min(s, strand.length));
+  const base = pointWithoutTie(strand, clampedS);
+  if (!strand.tie) return base;
+  const gatherS = Math.min(strand.tie.gatherS, strand.length);
+  const gatherPoint = pointWithoutTie(strand, gatherS);
+  const t = Math.max(0, Math.min(1, clampedS / gatherS));
+  const ease = t * t * (3 - 2 * t);
+  return [
+    base[0] + (strand.tie.anchor[0] - gatherPoint[0]) * ease,
+    base[1] + (strand.tie.anchor[1] - gatherPoint[1]) * ease,
+    base[2] + (strand.tie.anchor[2] - gatherPoint[2]) * ease,
+  ];
 }
 
 export function sampleStrand(strand: GuideStrand, segments = 40): Vec3[] {
@@ -200,6 +223,19 @@ export class HairEditor {
     this.saveUndo();
     this.state = replaceStrand(this.state, { ...strand, earTuck: side });
     return { changed: true, strandId, oldLength: strand.length, newLength: strand.length };
+  }
+
+  public tieStrands(strandIds: readonly string[], tie: HairTie): readonly EditResult[] {
+    if (!tie.id || !tie.anchor.every(Number.isFinite) || !Number.isFinite(tie.gatherS) || tie.gatherS <= 0) return [];
+    const targetIds = new Set(strandIds);
+    const eligible = this.state.strands.filter((strand) => targetIds.has(strand.id) && strand.length > tie.gatherS && strand.tie?.id !== tie.id);
+    if (eligible.length === 0) return [];
+    this.saveUndo();
+    this.state = {
+      ...this.state,
+      strands: this.state.strands.map((strand) => targetIds.has(strand.id) && strand.length > tie.gatherS ? { ...strand, tie } : strand),
+    };
+    return eligible.map((strand) => ({ changed: true, strandId: strand.id, oldLength: strand.length, newLength: strand.length }));
   }
 
   public curlRange(strandId: string, curl: CurlSegment): EditResult {

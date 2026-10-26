@@ -64,9 +64,16 @@ scene.add(headRig);
 
 const hair = new THREE.Group();
 scene.add(hair);
+const tieMarker = new THREE.Mesh(
+  new THREE.TorusGeometry(0.025, 0.006, 8, 20),
+  new THREE.MeshStandardMaterial({ color: '#f6a9be', roughness: 0.45 }),
+);
+tieMarker.rotation.x = Math.PI / 2;
+tieMarker.visible = false;
+hair.add(tieMarker);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
 const hairLines = new Map<string, { line: THREE.Line; signature: string }>();
-type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'grow';
+type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'grow';
 type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
 let selectedId: string | undefined;
@@ -126,6 +133,9 @@ function redraw(): void {
     (line.material as THREE.LineBasicMaterial).color.set(strand.id === selectedId ? '#ffffff' : colors[strand.id]);
     rebuiltStrandCount += 1;
   }
+  const activeTie = state.strands.find((strand) => strand.tie)?.tie;
+  tieMarker.visible = Boolean(activeTie);
+  if (activeTie) tieMarker.position.fromArray(activeTie.anchor);
   const c = state.strands.find((strand) => strand.id === 'C');
   meshUpdateMilliseconds = performance.now() - startedAt;
   appStatus.textContent = c ? `${toolLabel(tool)} ｜ C：${Math.round(c.length * 100)} cm ｜ Undo ${editor.canUndo ? '可用' : '未有操作'}` : '髮束資料錯誤';
@@ -144,7 +154,7 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：點按任一髮束', grow: '增髮：點按髮束' })[value];
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
@@ -154,7 +164,7 @@ function hitHair(clientX: number, clientY: number): HairHit | undefined {
   raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
   scene.updateMatrixWorld(true);
   const headDistance = raycaster.intersectObject(headRig, true)[0]?.distance ?? Number.POSITIVE_INFINITY;
-  const intersection = raycaster.intersectObjects(hair.children, false)
+  const intersection = raycaster.intersectObjects([...hairLines.values()].map((record) => record.line), false)
     .find((candidate) => candidate.distance <= headDistance + 0.002);
   if (!intersection) return undefined;
   const { strandId, strandLength, sampleCount } = intersection.object.userData as {
@@ -231,6 +241,13 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     if (result.changed) persistState();
     redraw();
     appStatus.textContent = result.changed ? `已將 ${hit.id} 夾到${side === 'left' ? '左' : '右'}耳後` : '此髮束已在指定耳後';
+  } else if (tool === 'ponytail' && hit) {
+    const results = editor.tieStrands(editor.exportState().strands.map((strand) => strand.id), {
+      id: 'pony-low', anchor: [0, 0.02, -0.18], gatherS: 0.16,
+    });
+    if (results.length > 0) persistState();
+    redraw();
+    appStatus.textContent = results.length > 0 ? `已將 ${results.length} 束髮綁成低馬尾` : '髮束已綁定或長度不足';
   } else if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {

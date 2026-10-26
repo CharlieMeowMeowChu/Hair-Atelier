@@ -121,6 +121,20 @@ describe('HairEditor core invariants', () => {
     expect(editor.exportState().strands.find((strand) => strand.id === 'D')?.earTuck).toBeUndefined();
   });
 
+  it('gathers selected strands to a ponytail anchor while retaining downstream curl geometry', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0, direction: 1 });
+    const beforeTie = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    const beforeDelta = pointAt(beforeTie, 0.24).map((value, index) => value - pointAt(beforeTie, 0.2)[index]);
+    const results = editor.tieStrands(['A', 'C'], { id: 'pony-low', anchor: [0, 0.02, -0.18], gatherS: 0.16 });
+    const afterTie = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    const afterDelta = pointAt(afterTie, 0.24).map((value, index) => value - pointAt(afterTie, 0.2)[index]);
+    expect(results.map((result) => result.strandId)).toEqual(['A', 'C']);
+    expect(pointAt(afterTie, 0)).toEqual(beforeTie.root);
+    pointAt(afterTie, 0.16).forEach((value, index) => expect(value).toBeCloseTo([0, 0.02, -0.18][index]));
+    afterDelta.forEach((value, index) => expect(value).toBeCloseTo(beforeDelta[index]));
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;
