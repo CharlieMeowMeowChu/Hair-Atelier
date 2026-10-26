@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "blender": "4.3.2",
+  "checks": [
+    "headless_start",
+    "mesh_create",
+    "glb_export",
+    "glb_import",
+    "meter_scale"
+  ],
+  "expected_dimensions_m": [
+    0.20000000298023224,
+    0.20000000298023224,
+    0.20000000298023224
+  ],
+  "actual_dimensions_m": [
+    0.20000000298023224,
+    0.20000000298023224,
+    0.20000000298023224
+  ],
+  "max_error_m": 0.0,
+  "fixture_bytes": 1856,
+  "scope": "Environment smoke only; not F01 or any HAIR test"
+}
