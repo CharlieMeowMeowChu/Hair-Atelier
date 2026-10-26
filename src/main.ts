@@ -44,12 +44,14 @@ scene.add(head);
 const hair = new THREE.Group();
 scene.add(hair);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
+const hairLines = new Map<string, { line: THREE.Line; signature: string }>();
 type Tool = 'rotate' | 'cut' | 'curl' | 'grow';
 type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
 let selectedId: string | undefined;
 let previewCutS: number | undefined;
 let meshUpdateMilliseconds = 0;
+let rebuiltStrandCount = 0;
 const raycaster = new THREE.Raycaster();
 raycaster.params.Line = { threshold: 0.014 };
 const cursor = new THREE.Mesh(
@@ -61,17 +63,40 @@ scene.add(cursor);
 
 function redraw(): void {
   const startedAt = performance.now();
-  hair.clear();
-  for (const strand of editor.exportState().strands) {
+  rebuiltStrandCount = 0;
+  const state = editor.exportState();
+  const activeIds = new Set(state.strands.map((strand) => strand.id));
+  for (const [id, record] of hairLines) {
+    if (activeIds.has(id)) continue;
+    hair.remove(record.line);
+    record.line.geometry.dispose();
+    (Array.isArray(record.line.material) ? record.line.material : [record.line.material]).forEach((material) => material.dispose());
+    hairLines.delete(id);
+  }
+  for (const strand of state.strands) {
+    const signature = JSON.stringify(strand);
+    const existing = hairLines.get(strand.id);
+    if (existing?.signature === signature) continue;
     const sampled = sampleStrand(strand);
     const points = sampled.map(([x, y, z]) => new THREE.Vector3(x, y, z));
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({ color: colors[strand.id], linewidth: 2 });
-    const line = new THREE.Line(geometry, material);
-    line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
-    hair.add(line);
+    if (existing) {
+      existing.line.geometry.dispose();
+      existing.line.geometry = geometry;
+      existing.line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
+      existing.signature = signature;
+    } else {
+      const material = new THREE.LineBasicMaterial({ color: colors[strand.id], linewidth: 2 });
+      const line = new THREE.Line(geometry, material);
+      line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
+      hair.add(line);
+      hairLines.set(strand.id, { line, signature });
+    }
+    const line = hairLines.get(strand.id)!.line;
+    (line.material as THREE.LineBasicMaterial).color.set(strand.id === selectedId ? '#ffffff' : colors[strand.id]);
+    rebuiltStrandCount += 1;
   }
-  const c = editor.exportState().strands.find((strand) => strand.id === 'C');
+  const c = state.strands.find((strand) => strand.id === 'C');
   meshUpdateMilliseconds = performance.now() - startedAt;
   appStatus.textContent = c ? `${toolLabel(tool)} ｜ C：${Math.round(c.length * 100)} cm ｜ Undo ${editor.canUndo ? '可用' : '未有操作'}` : '髮束資料錯誤';
   updateOverlay();
@@ -85,7 +110,7 @@ function updateOverlay(): void {
   if (metrics.length) metrics.length.textContent = strand ? `${(strand.length * 100).toFixed(1)} cm` : '—';
   if (metrics.curl) metrics.curl.textContent = curl ? `${(curl.radius * 100).toFixed(1)} / ${(curl.pitch * 100).toFixed(1)} cm` : '—';
   if (metrics.cut) metrics.cut.textContent = previewCutS === undefined ? '—' : `${(previewCutS * 100).toFixed(1)} cm`;
-  if (metrics.mesh) metrics.mesh.textContent = `${meshUpdateMilliseconds.toFixed(2)} ms`;
+  if (metrics.mesh) metrics.mesh.textContent = `${meshUpdateMilliseconds.toFixed(2)} ms / ${rebuiltStrandCount}`;
 }
 
 function toolLabel(value: Tool): string {
