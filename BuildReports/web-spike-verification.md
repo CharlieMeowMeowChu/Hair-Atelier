@@ -16,7 +16,7 @@
 | 快速拖掃 | IMPLEMENTED | 兩個 PointerEvent 之間每 8 px 補取樣；一次手勢可剪多束，並合併成單一 Undo 指令 |
 | 靜止耗電控制 | IMPLEMENTED | 取消永久 animation loop；旋轉、選取、資料更新或 resize 時才要求下一幀渲染 |
 | 技術 overlay | IMPLEMENTED | 即時顯示 selected strand ID、實際弧長、curl radius/pitch、cut preview 弧長及 geometry rebuild 毫秒數 |
-| PWA 基礎 | IMPLEMENTED | manifest、service worker runtime cache；未做離線真機驗證 |
+| PWA 基礎 | IMPLEMENTED | manifest；service worker 導航採 network-first、靜態資源 stale-while-revalidate，啟用時清理舊版本 cache；`node --check` 通過，未做離線真機驗證 |
 
 ## 尚未通過／未聲稱完成
 
