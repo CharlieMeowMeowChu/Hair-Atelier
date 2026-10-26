@@ -1,4 +1,6 @@
-# Phase 0 實際驗證紀錄
+# Phase 0 實際驗證紀錄（Unity 歷史路徑）
+
+> **已取代：** 2026-10-26 後專案正式採 TypeScript＋Three.js Web App／PWA。本檔保留當時 Unity 環境檢查的歷史證據，不是目前的阻塞或接續步驟；現行真機接續見 [`Docs/mac-setup.md`](../../Docs/mac-setup.md) 與 [`Docs/safari-gate2-runbook.md`](../../Docs/safari-gate2-runbook.md)。
 
 日期：2026-10-26（香港）。基準 main：db65f6b54120bb7c682cc8f3ecd6ff2315d2f5ef。分支：phase0/environment-readiness。
 
