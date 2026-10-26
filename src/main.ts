@@ -168,7 +168,7 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', select: '選取：點按髮束加入或移除', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：套用至選取組別', halfup: '公主頭：套用至選取組別', pair: '兩束綁：點按任一髮束', braid: '三股辮：需要選取三束', sweep: '側撥：點按任一髮束', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '旋轉檢視', select: '選取：點按髮束加入或移除', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：套用至選取組別', halfup: '公主頭：套用至選取組別', pair: '兩束綁：先選取兩束或以上，再點按髮束', braid: '三股辮：需要選取三束', sweep: '側撥：點按任一髮束', grow: '增髮：點按髮束' })[value];
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
@@ -280,14 +280,28 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     redraw();
     appStatus.textContent = results.length > 0 ? '已將上半部髮束綁成公主頭' : '上半部髮束已綁定或長度不足';
   } else if (tool === 'pair' && hit) {
+    const selected = [...selectedStrandIds]
+      .map((id) => editor.exportState().strands.find((strand) => strand.id === id))
+      .filter((strand): strand is NonNullable<typeof strand> => Boolean(strand))
+      .sort((left, right) => left.root[0] - right.root[0]);
+    if (selected.length < 2) {
+      appStatus.textContent = '請先用「選取」揀至少兩束髮，再建立兩束綁';
+      requestRender();
+      return;
+    }
+    const splitAt = Math.ceil(selected.length / 2);
+    const leftIds = selected.slice(0, splitAt).map((strand) => strand.id);
+    const rightIds = selected.slice(splitAt).map((strand) => strand.id);
     const anchor: Vector3Tuple = [0, 0.04, -0.18];
     const results = editor.tieGroups([
-      { strandIds: ['A', 'B'], tie: { id: 'pair-left', anchor, gatherS: 0.15 } },
-      { strandIds: ['C', 'D'], tie: { id: 'pair-right', anchor, gatherS: 0.15 } },
+      { strandIds: leftIds, tie: { id: 'pair-left', anchor, gatherS: 0.15 } },
+      { strandIds: rightIds, tie: { id: 'pair-right', anchor, gatherS: 0.15 } },
     ]);
     if (results.length > 0) persistState();
     redraw();
-    appStatus.textContent = results.length > 0 ? '已把兩組髮束綁到同一位置' : '髮束已綁定或長度不足';
+    appStatus.textContent = results.length > 0
+      ? `已把 ${leftIds.join('、')} 與 ${rightIds.join('、')} 綁到同一位置`
+      : '髮束已綁定或長度不足';
   } else if (tool === 'braid' && hit) {
     const selected = selectedStrandIds.size === 3 ? [...selectedStrandIds] as [string, string, string] : ['B', 'C', 'D'] as [string, string, string];
     const results = editor.braidStrands(selected, {
@@ -434,7 +448,13 @@ document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', ()
   appStatus.textContent = '已讀取本機儲存';
   redraw();
 });
-document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => { editor = new HairEditor(createDemoHairState()); persistState(); redraw(); });
+document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => {
+  editor = new HairEditor(createDemoHairState());
+  selectedStrandIds.clear();
+  selectedId = undefined;
+  persistState();
+  redraw();
+});
 
 new ResizeObserver(() => {
   const { clientWidth, clientHeight } = stage;
