@@ -291,4 +291,26 @@ describe('HairEditor core invariants', () => {
     expect(parseHairState('{')).toBeUndefined();
     expect(parseHairState(JSON.stringify({ schemaVersion: 1, strands: [{ id: 'bad' }] }))).toBeUndefined();
   });
+
+  it('reproduces the complete Gate 2 curl-cut-grow history after undo, redo and reload', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 });
+    editor.cutAt('C', 0.2);
+    editor.growBy('C', 0.1);
+    const beforeUndo = canonicalState(editor.exportState());
+    const expected = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    const samples = [0, 0.04, 0.08, 0.16, 0.2, 0.3].map((s) => pointAt(expected, s));
+
+    editor.undo();
+    editor.redo();
+    const reloaded = parseHairState(canonicalState(editor.exportState()));
+    expect(reloaded).toBeDefined();
+    expect(canonicalState(reloaded!)).toBe(beforeUndo);
+
+    const restored = reloaded!.strands.find((strand) => strand.id === 'C')!;
+    samples.forEach((sample, index) => {
+      const actual = pointAt(restored, [0, 0.04, 0.08, 0.16, 0.2, 0.3][index]);
+      expect(Math.hypot(sample[0] - actual[0], sample[1] - actual[1], sample[2] - actual[2])).toBeLessThanOrEqual(0.0005);
+    });
+  });
 });
