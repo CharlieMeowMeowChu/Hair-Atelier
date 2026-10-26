@@ -57,7 +57,7 @@ const hair = new THREE.Group();
 scene.add(hair);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
 const hairLines = new Map<string, { line: THREE.Line; signature: string }>();
-type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'grow';
+type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'grow';
 type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
 let selectedId: string | undefined;
@@ -135,7 +135,7 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', grow: '增髮：點按髮束' })[value];
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
@@ -193,7 +193,7 @@ function showCursor(hit: HairHit | undefined): void {
 
 let rotationX = 0;
 let rotationY = 0;
-let pointer: { x: number; y: number; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number } | undefined;
+let pointer: { x: number; y: number; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number; combStart?: { x: number; y: number } } | undefined;
 const activePointers = new Map<number, { x: number; y: number }>();
 let lastPinchDistance: number | undefined;
 function pinchDistance(): number | undefined {
@@ -207,7 +207,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   if (hit) cuts.set(hit.id, hit.s);
   const clippedIds = new Set<string>();
   if (hit) clippedIds.add(hit.id);
-  pointer = { x: event.clientX, y: event.clientY, hit, cuts, clippedIds, curlStartX: event.clientX };
+  pointer = { x: event.clientX, y: event.clientY, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
   renderer.domElement.setPointerCapture(event.pointerId);
   lastPinchDistance = pinchDistance();
   if (tool === 'grow' && hit) {
@@ -241,6 +241,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
     showCursor(hits.at(-1));
     return;
   }
+  if (tool === 'comb') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool === 'curl') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   const nextPinchDistance = pinchDistance();
@@ -292,6 +293,16 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     if (result.changed) persistState();
     redraw();
     appStatus.textContent = result.changed ? `已捲曲 ${strand.id} 的 ${Math.round(startS * 100)} cm 至髮尾` : '未能建立捲曲';
+  }
+  if (tool === 'comb' && gesture.hit && gesture.combStart) {
+    const result = editor.combBy(gesture.hit.id, [
+      (event.clientX - gesture.combStart.x) * 0.0025,
+      0,
+      -(event.clientY - gesture.combStart.y) * 0.0025,
+    ]);
+    if (result.changed) persistState();
+    redraw();
+    appStatus.textContent = result.changed ? `已向指定方向撥動 ${gesture.hit.id}` : '梳子未產生有效位移';
   }
 }
 renderer.domElement.addEventListener('pointerup', (event) => finishGesture(event));

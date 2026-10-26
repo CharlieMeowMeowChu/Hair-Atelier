@@ -84,6 +84,18 @@ describe('HairEditor core invariants', () => {
     expect(editor.clipManyAt(['A', 'C'], 0.06)).toEqual([]);
   });
 
+  it('keeps roots fixed and retained combed geometry stable after cutting', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const original = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    expect(editor.combBy('C', [0.25, 0, -0.1]).changed).toBe(true);
+    const combed = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    const retained = pointAt(combed, 0.16);
+    expect(pointAt(combed, 0)).toEqual(original.root);
+    editor.cutAt('C', 0.2);
+    const cut = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    expect(pointAt(cut, 0.16)).toEqual(retained);
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;

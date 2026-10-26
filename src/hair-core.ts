@@ -148,6 +148,22 @@ export class HairEditor {
     return this.cutManyAt(strandIds.map((strandId) => ({ strandId, arcLengthMeters: guardLengthMeters })));
   }
 
+  public combBy(strandId: string, lateralDelta: Vec3): EditResult {
+    const strand = this.state.strands.find((candidate) => candidate.id === strandId);
+    if (!strand || !lateralDelta.every(Number.isFinite)) return { changed: false, reason: 'Invalid comb target', strandId };
+    const direction: Vec3 = [
+      Math.max(-0.75, Math.min(0.75, strand.direction[0] + lateralDelta[0])),
+      strand.direction[1],
+      Math.max(-0.75, Math.min(0.75, strand.direction[2] + lateralDelta[2])),
+    ];
+    if (direction[0] === strand.direction[0] && direction[2] === strand.direction[2]) {
+      return { changed: false, reason: 'No comb displacement', strandId };
+    }
+    this.saveUndo();
+    this.state = replaceStrand(this.state, { ...strand, direction });
+    return { changed: true, strandId, oldLength: strand.length, newLength: strand.length };
+  }
+
   public curlRange(strandId: string, curl: CurlSegment): EditResult {
     const strand = this.state.strands.find((candidate) => candidate.id === strandId);
     if (!strand || curl.radius <= 0 || curl.pitch <= 0 || curl.startS < 0 || curl.endS <= curl.startS ||
