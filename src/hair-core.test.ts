@@ -143,6 +143,16 @@ describe('HairEditor core invariants', () => {
     expect(editor.exportState().strands.every((strand) => strand.tie?.id === 'pony-high')).toBe(true);
   });
 
+  it('keeps lower strands free when only the upper group is tied', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const results = editor.tieStrands(['B', 'C'], { id: 'half-up', anchor: [0, 0.12, -0.15], gatherS: 0.13 });
+    const state = editor.exportState();
+    expect(results.map((result) => result.strandId)).toEqual(['B', 'C']);
+    expect(state.strands.find((strand) => strand.id === 'A')?.tie).toBeUndefined();
+    expect(state.strands.find((strand) => strand.id === 'D')?.tie).toBeUndefined();
+    expect(state.strands.find((strand) => strand.id === 'B')?.tie?.id).toBe('half-up');
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;

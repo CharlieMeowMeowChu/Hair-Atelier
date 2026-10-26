@@ -64,16 +64,14 @@ scene.add(headRig);
 
 const hair = new THREE.Group();
 scene.add(hair);
-const tieMarker = new THREE.Mesh(
-  new THREE.TorusGeometry(0.025, 0.006, 8, 20),
-  new THREE.MeshStandardMaterial({ color: '#f6a9be', roughness: 0.45 }),
-);
-tieMarker.rotation.x = Math.PI / 2;
-tieMarker.visible = false;
-hair.add(tieMarker);
+const tieMarkers = new THREE.Group();
+const tieMarkerGeometry = new THREE.TorusGeometry(0.025, 0.006, 8, 20);
+const tieMarkerMaterial = new THREE.MeshStandardMaterial({ color: '#f6a9be', roughness: 0.45 });
+const tieMarkerPool = new Map<string, THREE.Mesh>();
+hair.add(tieMarkers);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
 const hairLines = new Map<string, { line: THREE.Line; signature: string }>();
-type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'grow';
+type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'halfup' | 'grow';
 type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
 let selectedId: string | undefined;
@@ -133,9 +131,19 @@ function redraw(): void {
     (line.material as THREE.LineBasicMaterial).color.set(strand.id === selectedId ? '#ffffff' : colors[strand.id]);
     rebuiltStrandCount += 1;
   }
-  const activeTie = state.strands.find((strand) => strand.tie)?.tie;
-  tieMarker.visible = Boolean(activeTie);
-  if (activeTie) tieMarker.position.fromArray(activeTie.anchor);
+  const activeTies = [...new Map(state.strands.flatMap((strand) => strand.tie ? [[strand.tie.id, strand.tie] as const] : [])).values()];
+  tieMarkerPool.forEach((marker) => { marker.visible = false; });
+  for (const tie of activeTies) {
+    let marker = tieMarkerPool.get(tie.id);
+    if (!marker) {
+      marker = new THREE.Mesh(tieMarkerGeometry, tieMarkerMaterial);
+      marker.rotation.x = Math.PI / 2;
+      tieMarkers.add(marker);
+      tieMarkerPool.set(tie.id, marker);
+    }
+    marker.position.fromArray(tie.anchor);
+    marker.visible = true;
+  }
   const c = state.strands.find((strand) => strand.id === 'C');
   meshUpdateMilliseconds = performance.now() - startedAt;
   appStatus.textContent = c ? `${toolLabel(tool)} ｜ C：${Math.round(c.length * 100)} cm ｜ Undo ${editor.canUndo ? '可用' : '未有操作'}` : '髮束資料錯誤';
@@ -154,7 +162,7 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：點按任一髮束', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：點按任一髮束', halfup: '公主頭：點按任一髮束', grow: '增髮：點按髮束' })[value];
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
@@ -252,6 +260,11 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     if (results.length > 0) persistState();
     redraw();
     appStatus.textContent = results.length > 0 ? `已將 ${results.length} 束髮綁成${height === 'high' ? '高' : '低'}馬尾` : '髮束已綁定或長度不足';
+  } else if (tool === 'halfup' && hit) {
+    const results = editor.tieStrands(['B', 'C'], { id: 'half-up', anchor: [0, 0.12, -0.15], gatherS: 0.13 });
+    if (results.length > 0) persistState();
+    redraw();
+    appStatus.textContent = results.length > 0 ? '已將上半部髮束綁成公主頭' : '上半部髮束已綁定或長度不足';
   } else if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {
