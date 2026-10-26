@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalState, createDemoHairState, HairEditor, parseHairState, pointAt } from './hair-core';
+import { canonicalState, createDemoHairState, HairEditor, parseEditorHistory, parseHairState, pointAt } from './hair-core';
 
 describe('HairEditor core invariants', () => {
   it('cuts only the selected strand', () => {
@@ -312,5 +312,24 @@ describe('HairEditor core invariants', () => {
       const actual = pointAt(restored, [0, 0.04, 0.08, 0.16, 0.2, 0.3][index]);
       expect(Math.hypot(sample[0] - actual[0], sample[1] - actual[1], sample[2] - actual[2])).toBeLessThanOrEqual(0.0005);
     });
+  });
+
+  it('preserves up to twenty undo and redo states across a history reload', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0, direction: 1 });
+    editor.cutAt('C', 0.2);
+    const beforeUndo = canonicalState(editor.exportState());
+    editor.undo();
+    const history = parseEditorHistory(JSON.stringify(editor.exportHistory()));
+    expect(history).toBeDefined();
+
+    const restored = new HairEditor(history!.current, history!);
+    expect(restored.canUndo).toBe(true);
+    expect(restored.canRedo).toBe(true);
+    restored.redo();
+    expect(canonicalState(restored.exportState())).toBe(beforeUndo);
+    restored.undo();
+    expect(restored.exportHistory().undo).toHaveLength(1);
+    expect(parseEditorHistory('{"version":1,"current":{},"undo":[],"redo":[]}')).toBeUndefined();
   });
 });

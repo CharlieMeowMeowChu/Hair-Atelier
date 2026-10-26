@@ -49,6 +49,13 @@ export interface HairState {
   readonly strands: readonly GuideStrand[];
 }
 
+export interface EditorHistory {
+  readonly version: 1;
+  readonly current: HairState;
+  readonly undo: readonly HairState[];
+  readonly redo: readonly HairState[];
+}
+
 export interface EditResult {
   readonly changed: boolean;
   readonly reason?: string;
@@ -101,6 +108,29 @@ export function parseHairState(serialized: string): HairState | undefined {
           curl.radius > 0 && curl.pitch > 0 && (curl.direction === -1 || curl.direction === 1));
     });
     return valid ? copyState(state as HairState) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function parseEditorHistory(serialized: string): EditorHistory | undefined {
+  try {
+    const value: unknown = JSON.parse(serialized);
+    if (!value || typeof value !== 'object') return undefined;
+    const candidate = value as Partial<EditorHistory>;
+    if (candidate.version !== 1 || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo) ||
+      candidate.undo.length > 20 || candidate.redo.length > 20) return undefined;
+    const parseState = (state: unknown): HairState | undefined => parseHairState(JSON.stringify(state));
+    const current = parseState(candidate.current);
+    const undo = candidate.undo.map(parseState);
+    const redo = candidate.redo.map(parseState);
+    if (!current || undo.some((state) => !state) || redo.some((state) => !state)) return undefined;
+    return {
+      version: 1,
+      current,
+      undo: undo as HairState[],
+      redo: redo as HairState[],
+    };
   } catch {
     return undefined;
   }
@@ -180,11 +210,21 @@ export class HairEditor {
   private undoStack: HairState[] = [];
   private redoStack: HairState[] = [];
 
-  public constructor(initial: HairState) {
+  public constructor(initial: HairState, history?: Pick<EditorHistory, 'undo' | 'redo'>) {
     this.state = copyState(initial);
+    this.undoStack = (history?.undo ?? []).slice(-20).map(copyState);
+    this.redoStack = (history?.redo ?? []).slice(-20).map(copyState);
   }
 
   public exportState(): HairState { return copyState(this.state); }
+  public exportHistory(): EditorHistory {
+    return {
+      version: 1,
+      current: this.exportState(),
+      undo: this.undoStack.map(copyState),
+      redo: this.redoStack.map(copyState),
+    };
+  }
   public get canUndo(): boolean { return this.undoStack.length > 0; }
   public get canRedo(): boolean { return this.redoStack.length > 0; }
 

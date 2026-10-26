@@ -4,7 +4,7 @@ import {
   TorusGeometry, Vector2, Vector3, WebGLRenderer, type Vector3Tuple,
 } from 'three';
 import './style.css';
-import { canonicalState, createDemoHairState, HairEditor, parseHairState, sampleStrand } from './hair-core';
+import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, sampleStrand } from './hair-core';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -18,19 +18,27 @@ const metrics = {
   mesh: document.querySelector<HTMLElement>('#metric-mesh'),
 };
 
-const storageKey = 'hair-atelier.hair-state.v1';
-function loadPersistedState() {
-  try { return parseHairState(localStorage.getItem(storageKey) ?? ''); } catch { return undefined; }
+const storageKey = 'hair-atelier.editor-history.v1';
+const legacyStorageKey = 'hair-atelier.hair-state.v1';
+function loadPersistedEditor(): HairEditor | undefined {
+  try {
+    const history = parseEditorHistory(localStorage.getItem(storageKey) ?? '');
+    if (history) return new HairEditor(history.current, history);
+    const legacyState = parseHairState(localStorage.getItem(legacyStorageKey) ?? '');
+    return legacyState ? new HairEditor(legacyState) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 function persistState(): boolean {
   try {
-    localStorage.setItem(storageKey, canonicalState(editor.exportState()));
+    localStorage.setItem(storageKey, JSON.stringify(editor.exportHistory()));
     return true;
   } catch {
     return false;
   }
 }
-let editor = new HairEditor(loadPersistedState() ?? createDemoHairState());
+let editor = loadPersistedEditor() ?? new HairEditor(createDemoHairState());
 const scene = new Scene();
 scene.background = new Color('#211c29');
 const camera = new PerspectiveCamera(35, 1, 0.01, 10);
@@ -442,10 +450,10 @@ document.querySelector<HTMLButtonElement>('#save')?.addEventListener('click', ()
   appStatus.textContent = persistState() ? '已儲存到本機瀏覽器' : '瀏覽器拒絕本機儲存';
 });
 document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', () => {
-  const restored = loadPersistedState();
+  const restored = loadPersistedEditor();
   if (!restored) { appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
-  editor = new HairEditor(restored);
-  appStatus.textContent = '已讀取本機儲存';
+  editor = restored;
+  appStatus.textContent = '已讀取本機儲存與操作歷史';
   redraw();
 });
 document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => {
