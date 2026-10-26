@@ -22,6 +22,7 @@
 | 兩束綁原型 | IMPLEMENTED | A/B 與 C/D 兩組以不同 group ID 約束到同一 anchor；一次操作可 Undo，兩組身份保留；尚未有玩家圈選任意髮束組的 UI |
 | 三股辮原型 | IMPLEMENTED | B/C/D 導引束用 index 0–2 的相位分離程序化 3D 路徑交織；髮根固定，剪後 braid constraint 保留；尚未有任意三束選取、逐段編織手勢或辮尾固定 UI |
 | 側撥原型 | IMPLEMENTED | 可選左／右側，把所有示範導引束加上可保存的側向偏移；髮根固定，原有 comb direction 不被清除；尚未有肩膀／耳朵碰撞及區域刷選 |
+| 髮束選取 | IMPLEMENTED | 選取工具可點按切換髮束群組；馬尾、公主頭會套用選取組別；選中剛好三束時三股辮使用該組別，否則使用示範 B/C/D |
 | 剪刀預覽及遮擋 | IMPLEMENTED | Three.js Raycaster 對髮束線段拾取；若頭部交點較近便排除後方髮束；命中束轉白並顯示切口環形預覽 |
 | 剪刀游標 | IMPLEMENTED | 命中髮束時顯示相機朝向的雙刃剪刀游標；未命中或離開畫面時隱藏 |
 | 快速拖掃 | IMPLEMENTED | 兩個 PointerEvent 之間每 8 px 補取樣；一次手勢可剪多束，並合併成單一 Undo 指令 |
@@ -34,7 +35,7 @@
 ## 尚未通過／未聲稱完成
 
 - Safari／iPhone 16 Pro Max／iPad A16 尚未真機打開；FPS、記憶體、離線與背景恢復均為 NOT_TESTED。
-- Production build 的 Three.js 主 bundle 為約 500 KB（gzip 約 128 KB），Vite 發出 chunk-size 警告；尚未做模組拆分與 iPhone/iPad 載入／記憶體量測。
+- Production build 的 Three.js 主 bundle 為約 501 KB（gzip 約 128 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。
 - 此原型已有命中高亮、頭部遮擋 raycast 與拖掃補取樣，但尚未提供剪刀模型、密集髮束空間索引、髮束互相遮擋或 ribbon mesh 的局部重建。這些仍須在後續 Gate 3 驗收。
 - 這是 4 條彩色 GuideStrand 與球體，不是全頭髮、真人模型、物理碰撞、馬尾或辮子。
 - 未建立公開部署或 URL。PWA source 可 production build，但未公開或安裝到裝置。

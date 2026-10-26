@@ -1,4 +1,8 @@
-import * as THREE from 'three';
+import {
+  BufferGeometry, CircleGeometry, Color, DoubleSide, Group, HemisphereLight, Line, LineBasicMaterial, MathUtils,
+  Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Raycaster, RingGeometry, Scene, SphereGeometry,
+  TorusGeometry, Vector2, Vector3, WebGLRenderer, type Vector3Tuple,
+} from 'three';
 import './style.css';
 import { canonicalState, createDemoHairState, HairEditor, parseHairState, sampleStrand } from './hair-core';
 
@@ -27,11 +31,11 @@ function persistState(): boolean {
   }
 }
 let editor = new HairEditor(loadPersistedState() ?? createDemoHairState());
-const scene = new THREE.Scene();
-scene.background = new THREE.Color('#211c29');
-const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 10);
+const scene = new Scene();
+scene.background = new Color('#211c29');
+const camera = new PerspectiveCamera(35, 1, 0.01, 10);
 camera.position.set(0, 0.05, 1.35);
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(stage.clientWidth, stage.clientHeight);
 stage.append(renderer.domElement);
@@ -45,54 +49,55 @@ function requestRender(): void {
   });
 }
 
-scene.add(new THREE.HemisphereLight('#f4dffc', '#17141f', 2.2));
-const head = new THREE.Mesh(
-  new THREE.SphereGeometry(0.22, 32, 24),
-  new THREE.MeshStandardMaterial({ color: '#9a8b89', roughness: 0.72 }),
+scene.add(new HemisphereLight('#f4dffc', '#17141f', 2.2));
+const head = new Mesh(
+  new SphereGeometry(0.22, 32, 24),
+  new MeshStandardMaterial({ color: '#9a8b89', roughness: 0.72 }),
 );
 head.scale.set(1, 1.12, 0.92);
-const headRig = new THREE.Group();
+const headRig = new Group();
 headRig.add(head);
-const earMaterial = new THREE.MeshStandardMaterial({ color: '#9a8b89', roughness: 0.72 });
+const earMaterial = new MeshStandardMaterial({ color: '#9a8b89', roughness: 0.72 });
 for (const side of [-1, 1]) {
-  const ear = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), earMaterial);
+  const ear = new Mesh(new SphereGeometry(0.045, 16, 12), earMaterial);
   ear.scale.set(0.62, 1, 0.5);
   ear.position.set(side * 0.218, 0.025, 0);
   headRig.add(ear);
 }
 scene.add(headRig);
 
-const hair = new THREE.Group();
+const hair = new Group();
 scene.add(hair);
-const tieMarkers = new THREE.Group();
-const tieMarkerGeometry = new THREE.TorusGeometry(0.025, 0.006, 8, 20);
-const tieMarkerMaterial = new THREE.MeshStandardMaterial({ color: '#f6a9be', roughness: 0.45 });
-const tieMarkerPool = new Map<string, THREE.Mesh>();
+const tieMarkers = new Group();
+const tieMarkerGeometry = new TorusGeometry(0.025, 0.006, 8, 20);
+const tieMarkerMaterial = new MeshStandardMaterial({ color: '#f6a9be', roughness: 0.45 });
+const tieMarkerPool = new Map<string, Mesh>();
 hair.add(tieMarkers);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
-const hairLines = new Map<string, { line: THREE.Line; signature: string }>();
-type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'halfup' | 'pair' | 'braid' | 'sweep' | 'grow';
-type HairHit = { id: string; s: number; point: THREE.Vector3 };
+const hairLines = new Map<string, { line: Line; signature: string }>();
+type Tool = 'rotate' | 'select' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'halfup' | 'pair' | 'braid' | 'sweep' | 'grow';
+type HairHit = { id: string; s: number; point: Vector3 };
 let tool: Tool = 'rotate';
 let selectedId: string | undefined;
+const selectedStrandIds = new Set<string>();
 let previewCutS: number | undefined;
 let meshUpdateMilliseconds = 0;
 let rebuiltStrandCount = 0;
-const raycaster = new THREE.Raycaster();
+const raycaster = new Raycaster();
 raycaster.params.Line = { threshold: 0.014 };
-const cursor = new THREE.Mesh(
-  new THREE.RingGeometry(0.012, 0.016, 20),
-  new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide }),
+const cursor = new Mesh(
+  new RingGeometry(0.012, 0.016, 20),
+  new MeshBasicMaterial({ color: '#ffffff', side: DoubleSide }),
 );
 cursor.visible = false;
 scene.add(cursor);
-const scissorsCursor = new THREE.Group();
-const bladeGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.028, -0.014, 0), new THREE.Vector3(0.028, 0.014, 0)]);
-const bladeMaterial = new THREE.LineBasicMaterial({ color: '#ffd2e0' });
-const bladeA = new THREE.Line(bladeGeometry, bladeMaterial);
+const scissorsCursor = new Group();
+const bladeGeometry = new BufferGeometry().setFromPoints([new Vector3(-0.028, -0.014, 0), new Vector3(0.028, 0.014, 0)]);
+const bladeMaterial = new LineBasicMaterial({ color: '#ffd2e0' });
+const bladeA = new Line(bladeGeometry, bladeMaterial);
 const bladeB = bladeA.clone();
 bladeB.rotation.z = Math.PI / 2;
-scissorsCursor.add(bladeA, bladeB, new THREE.Mesh(new THREE.CircleGeometry(0.006, 16), new THREE.MeshBasicMaterial({ color: '#ffffff' })));
+scissorsCursor.add(bladeA, bladeB, new Mesh(new CircleGeometry(0.006, 16), new MeshBasicMaterial({ color: '#ffffff' })));
 scissorsCursor.visible = false;
 scene.add(scissorsCursor);
 
@@ -113,22 +118,22 @@ function redraw(): void {
     const existing = hairLines.get(strand.id);
     if (existing?.signature === signature) continue;
     const sampled = sampleStrand(strand);
-    const points = sampled.map(([x, y, z]) => new THREE.Vector3(x, y, z));
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const points = sampled.map(([x, y, z]) => new Vector3(x, y, z));
+    const geometry = new BufferGeometry().setFromPoints(points);
     if (existing) {
       existing.line.geometry.dispose();
       existing.line.geometry = geometry;
       existing.line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
       existing.signature = signature;
     } else {
-      const material = new THREE.LineBasicMaterial({ color: colors[strand.id], linewidth: 2 });
-      const line = new THREE.Line(geometry, material);
+      const material = new LineBasicMaterial({ color: colors[strand.id], linewidth: 2 });
+      const line = new Line(geometry, material);
       line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
       hair.add(line);
       hairLines.set(strand.id, { line, signature });
     }
     const line = hairLines.get(strand.id)!.line;
-    (line.material as THREE.LineBasicMaterial).color.set(strand.id === selectedId ? '#ffffff' : colors[strand.id]);
+    (line.material as LineBasicMaterial).color.set(selectedStrandIds.has(strand.id) ? '#ffeaf1' : colors[strand.id]);
     rebuiltStrandCount += 1;
   }
   const activeTies = [...new Map(state.strands.flatMap((strand) => strand.tie ? [[strand.tie.id, strand.tie] as const] : [])).values()];
@@ -136,7 +141,7 @@ function redraw(): void {
   for (const tie of activeTies) {
     let marker = tieMarkerPool.get(tie.id);
     if (!marker) {
-      marker = new THREE.Mesh(tieMarkerGeometry, tieMarkerMaterial);
+      marker = new Mesh(tieMarkerGeometry, tieMarkerMaterial);
       marker.rotation.x = Math.PI / 2;
       tieMarkers.add(marker);
       tieMarkerPool.set(tie.id, marker);
@@ -148,6 +153,7 @@ function redraw(): void {
   meshUpdateMilliseconds = performance.now() - startedAt;
   appStatus.textContent = c ? `${toolLabel(tool)} ｜ C：${Math.round(c.length * 100)} cm ｜ Undo ${editor.canUndo ? '可用' : '未有操作'}` : '髮束資料錯誤';
   updateOverlay();
+  highlightHair();
   requestRender();
 }
 
@@ -162,14 +168,14 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：點按任一髮束', halfup: '公主頭：點按任一髮束', pair: '兩束綁：點按任一髮束', braid: '三股辮：點按任一髮束', sweep: '側撥：點按任一髮束', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '旋轉檢視', select: '選取：點按髮束加入或移除', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：套用至選取組別', halfup: '公主頭：套用至選取組別', pair: '兩束綁：點按任一髮束', braid: '三股辮：需要選取三束', sweep: '側撥：點按任一髮束', grow: '增髮：點按髮束' })[value];
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
   const rect = renderer.domElement.getBoundingClientRect();
   const x = ((clientX - rect.left) / rect.width) * 2 - 1;
   const y = -((clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+  raycaster.setFromCamera(new Vector2(x, y), camera);
   scene.updateMatrixWorld(true);
   const headDistance = raycaster.intersectObject(headRig, true)[0]?.distance ?? Number.POSITIVE_INFINITY;
   const intersection = raycaster.intersectObjects([...hairLines.values()].map((record) => record.line), false)
@@ -196,9 +202,10 @@ function sweepHits(fromX: number, fromY: number, toX: number, toY: number): Hair
 
 function highlightHair(strandId?: string): void {
   for (const child of hair.children) {
-    const material = (child as THREE.Line).material as THREE.LineBasicMaterial;
+    if (!(child instanceof Line)) continue;
+    const material = (child as Line).material as LineBasicMaterial;
     const id = child.userData.strandId as string;
-    material.color.set(id === strandId ? '#ffffff' : colors[id]);
+    material.color.set(id === strandId ? '#ffffff' : selectedStrandIds.has(id) ? '#ffeaf1' : colors[id]);
   }
   requestRender();
 }
@@ -237,7 +244,13 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   pointer = { x: event.clientX, y: event.clientY, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
   renderer.domElement.setPointerCapture(event.pointerId);
   lastPinchDistance = pinchDistance();
-  if (tool === 'grow' && hit) {
+  if (tool === 'select' && hit) {
+    if (selectedStrandIds.has(hit.id)) selectedStrandIds.delete(hit.id);
+    else selectedStrandIds.add(hit.id);
+    selectedId = hit.id;
+    redraw();
+    appStatus.textContent = `已選取 ${[...selectedStrandIds].join('、') || '無髮束'}`;
+  } else if (tool === 'grow' && hit) {
     editor.growBy(hit.id, 0.05);
     persistState();
     redraw();
@@ -252,21 +265,22 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   } else if (tool === 'ponytail' && hit) {
     const height = document.querySelector<HTMLSelectElement>('#ponytail-height')?.value === 'high' ? 'high' : 'low';
     const tie = height === 'high'
-      ? { id: 'pony-high', anchor: [0, 0.17, -0.16] as THREE.Vector3Tuple, gatherS: 0.14 }
-      : { id: 'pony-low', anchor: [0, 0.02, -0.18] as THREE.Vector3Tuple, gatherS: 0.16 };
-    const results = editor.tieStrands(editor.exportState().strands.map((strand) => strand.id), {
+      ? { id: 'pony-high', anchor: [0, 0.17, -0.16] as Vector3Tuple, gatherS: 0.14 }
+      : { id: 'pony-low', anchor: [0, 0.02, -0.18] as Vector3Tuple, gatherS: 0.16 };
+    const targetIds = selectedStrandIds.size > 0 ? [...selectedStrandIds] : editor.exportState().strands.map((strand) => strand.id);
+    const results = editor.tieStrands(targetIds, {
       ...tie,
     });
     if (results.length > 0) persistState();
     redraw();
     appStatus.textContent = results.length > 0 ? `已將 ${results.length} 束髮綁成${height === 'high' ? '高' : '低'}馬尾` : '髮束已綁定或長度不足';
   } else if (tool === 'halfup' && hit) {
-    const results = editor.tieStrands(['B', 'C'], { id: 'half-up', anchor: [0, 0.12, -0.15], gatherS: 0.13 });
+    const results = editor.tieStrands(selectedStrandIds.size > 0 ? [...selectedStrandIds] : ['B', 'C'], { id: 'half-up', anchor: [0, 0.12, -0.15], gatherS: 0.13 });
     if (results.length > 0) persistState();
     redraw();
     appStatus.textContent = results.length > 0 ? '已將上半部髮束綁成公主頭' : '上半部髮束已綁定或長度不足';
   } else if (tool === 'pair' && hit) {
-    const anchor: THREE.Vector3Tuple = [0, 0.04, -0.18];
+    const anchor: Vector3Tuple = [0, 0.04, -0.18];
     const results = editor.tieGroups([
       { strandIds: ['A', 'B'], tie: { id: 'pair-left', anchor, gatherS: 0.15 } },
       { strandIds: ['C', 'D'], tie: { id: 'pair-right', anchor, gatherS: 0.15 } },
@@ -275,12 +289,13 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     redraw();
     appStatus.textContent = results.length > 0 ? '已把兩組髮束綁到同一位置' : '髮束已綁定或長度不足';
   } else if (tool === 'braid' && hit) {
-    const results = editor.braidStrands(['B', 'C', 'D'], {
+    const selected = selectedStrandIds.size === 3 ? [...selectedStrandIds] as [string, string, string] : ['B', 'C', 'D'] as [string, string, string];
+    const results = editor.braidStrands(selected, {
       id: 'braid-demo', axisOrigin: [0.04, 0.22, -0.02], startS: 0.04, endS: 0.24, radius: 0.018, pitch: 0.055,
     });
     if (results.length > 0) persistState();
     redraw();
-    appStatus.textContent = results.length > 0 ? '已以 B、C、D 建立三股辮路徑' : '髮束已編成辮或長度不足';
+    appStatus.textContent = results.length > 0 ? `已以 ${selected.join('、')} 建立三股辮路徑` : '需要三束未編髮或髮束長度不足';
   } else if (tool === 'sweep' && hit) {
     const side = document.querySelector<HTMLSelectElement>('#sweep-side')?.value === 'right' ? 'right' : 'left';
     const results = editor.sweepToSide(side);
@@ -319,13 +334,13 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   const nextPinchDistance = pinchDistance();
   if (nextPinchDistance && lastPinchDistance) {
-    camera.position.z = THREE.MathUtils.clamp(camera.position.z - (nextPinchDistance - lastPinchDistance) * 0.0025, 0.72, 2.2);
+    camera.position.z = MathUtils.clamp(camera.position.z - (nextPinchDistance - lastPinchDistance) * 0.0025, 0.72, 2.2);
     lastPinchDistance = nextPinchDistance;
     requestRender();
     return;
   }
   rotationY += (event.clientX - pointer.x) * 0.01;
-  rotationX = THREE.MathUtils.clamp(rotationX + (event.clientY - pointer.y) * 0.008, -0.45, 0.45);
+  rotationX = MathUtils.clamp(rotationX + (event.clientY - pointer.y) * 0.008, -0.45, 0.45);
   pointer.x = event.clientX;
   pointer.y = event.clientY;
   hair.rotation.set(rotationX, rotationY, 0);
@@ -379,7 +394,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
   }
   if (tool === 'part' && gesture.combStart) {
     const rect = renderer.domElement.getBoundingClientRect();
-    const partingX = THREE.MathUtils.clamp(((event.clientX - rect.left) / rect.width - 0.5) * 0.3, -0.15, 0.15);
+    const partingX = MathUtils.clamp(((event.clientX - rect.left) / rect.width - 0.5) * 0.3, -0.15, 0.15);
     const result = editor.setParting(partingX);
     if (result.changed) persistState();
     redraw();
