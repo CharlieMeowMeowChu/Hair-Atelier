@@ -108,6 +108,19 @@ describe('HairEditor core invariants', () => {
     expect(after.strands.some((strand) => strand.partingOffset?.[0] !== 0)).toBe(true);
   });
 
+  it('stores independent ear-tuck sides without moving roots', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const before = editor.exportState();
+    expect(editor.tuckBehindEar('A', 'left').changed).toBe(true);
+    expect(editor.tuckBehindEar('D', 'right').changed).toBe(true);
+    const after = editor.exportState();
+    expect(after.strands.find((strand) => strand.id === 'A')?.earTuck).toBe('left');
+    expect(after.strands.find((strand) => strand.id === 'D')?.earTuck).toBe('right');
+    expect(pointAt(after.strands.find((strand) => strand.id === 'A')!, 0)).toEqual(before.strands.find((strand) => strand.id === 'A')!.root);
+    editor.undo();
+    expect(editor.exportState().strands.find((strand) => strand.id === 'D')?.earTuck).toBeUndefined();
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;

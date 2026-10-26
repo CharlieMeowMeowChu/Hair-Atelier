@@ -51,13 +51,22 @@ const head = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ color: '#9a8b89', roughness: 0.72 }),
 );
 head.scale.set(1, 1.12, 0.92);
-scene.add(head);
+const headRig = new THREE.Group();
+headRig.add(head);
+const earMaterial = new THREE.MeshStandardMaterial({ color: '#9a8b89', roughness: 0.72 });
+for (const side of [-1, 1]) {
+  const ear = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), earMaterial);
+  ear.scale.set(0.62, 1, 0.5);
+  ear.position.set(side * 0.218, 0.025, 0);
+  headRig.add(ear);
+}
+scene.add(headRig);
 
 const hair = new THREE.Group();
 scene.add(hair);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
 const hairLines = new Map<string, { line: THREE.Line; signature: string }>();
-type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'grow';
+type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'grow';
 type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
 let selectedId: string | undefined;
@@ -135,7 +144,7 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', grow: '增髮：點按髮束' })[value];
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
@@ -144,7 +153,7 @@ function hitHair(clientX: number, clientY: number): HairHit | undefined {
   const y = -((clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
   scene.updateMatrixWorld(true);
-  const headDistance = raycaster.intersectObject(head, false)[0]?.distance ?? Number.POSITIVE_INFINITY;
+  const headDistance = raycaster.intersectObject(headRig, true)[0]?.distance ?? Number.POSITIVE_INFINITY;
   const intersection = raycaster.intersectObjects(hair.children, false)
     .find((candidate) => candidate.distance <= headDistance + 0.002);
   if (!intersection) return undefined;
@@ -215,6 +224,13 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     persistState();
     redraw();
     appStatus.textContent = `已對 ${hit.id} 增長 5 cm`;
+  } else if (tool === 'tuck' && hit) {
+    const strand = editor.exportState().strands.find((item) => item.id === hit.id);
+    const side = strand && strand.root[0] < 0 ? 'left' : 'right';
+    const result = editor.tuckBehindEar(hit.id, side);
+    if (result.changed) persistState();
+    redraw();
+    appStatus.textContent = result.changed ? `已將 ${hit.id} 夾到${side === 'left' ? '左' : '右'}耳後` : '此髮束已在指定耳後';
   } else if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {
@@ -257,7 +273,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   pointer.x = event.clientX;
   pointer.y = event.clientY;
   hair.rotation.set(rotationX, rotationY, 0);
-  head.rotation.set(rotationX, rotationY, 0);
+  headRig.rotation.set(rotationX, rotationY, 0);
   requestRender();
 });
 function finishGesture(event: PointerEvent, cancelled = false): void {

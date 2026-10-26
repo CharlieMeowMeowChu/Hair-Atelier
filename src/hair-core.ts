@@ -14,6 +14,7 @@ export interface GuideStrand {
   readonly root: Vec3;
   readonly direction: Vec3;
   readonly partingOffset?: Vec3;
+  readonly earTuck?: 'left' | 'right';
   readonly length: number;
   readonly maximumLength: number;
   readonly curls: readonly CurlSegment[];
@@ -64,6 +65,7 @@ export function parseHairState(serialized: string): HairState | undefined {
       const vectorIsValid = (vector: unknown): vector is Vec3 => Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
       return typeof candidate.id === 'string' && candidate.id.length > 0 && vectorIsValid(candidate.root) && vectorIsValid(candidate.direction) &&
         (candidate.partingOffset === undefined || vectorIsValid(candidate.partingOffset)) &&
+        (candidate.earTuck === undefined || candidate.earTuck === 'left' || candidate.earTuck === 'right') &&
         Number.isFinite(candidate.length) && Number.isFinite(candidate.maximumLength) && candidate.length! >= 0 && candidate.maximumLength! >= candidate.length! &&
         Array.isArray(candidate.curls) && candidate.curls.every((curl) => curl && Number.isFinite(curl.startS) && Number.isFinite(curl.endS) &&
           Number.isFinite(curl.radius) && Number.isFinite(curl.pitch) && Number.isFinite(curl.phase) && curl.startS >= 0 && curl.endS > curl.startS &&
@@ -89,6 +91,13 @@ export function pointAt(strand: GuideStrand, s: number): Vec3 {
     const phase = curl.phase + curl.direction * ((curlS - curl.startS) / curl.pitch) * Math.PI * 2;
     base[0] += curl.radius * (Math.cos(phase) - Math.cos(curl.phase));
     base[2] += curl.radius * (Math.sin(phase) - Math.sin(curl.phase));
+  }
+  if (strand.earTuck) {
+    const side = strand.earTuck === 'left' ? -1 : 1;
+    const t = Math.max(0, Math.min(1, (clampedS - 0.035) / 0.105));
+    const ease = t * t * (3 - 2 * t);
+    base[0] += (side * 0.23 - strand.root[0]) * ease;
+    base[2] += 0.055 * ease;
   }
   return base;
 }
@@ -182,6 +191,15 @@ export class HairEditor {
     this.saveUndo();
     this.state = { ...this.state, strands };
     return { changed: true, strandId: 'parting' };
+  }
+
+  public tuckBehindEar(strandId: string, side: 'left' | 'right'): EditResult {
+    const strand = this.state.strands.find((candidate) => candidate.id === strandId);
+    if (!strand || (side !== 'left' && side !== 'right')) return { changed: false, reason: 'Invalid ear tuck', strandId };
+    if (strand.earTuck === side) return { changed: false, reason: 'Already tucked', strandId };
+    this.saveUndo();
+    this.state = replaceStrand(this.state, { ...strand, earTuck: side });
+    return { changed: true, strandId, oldLength: strand.length, newLength: strand.length };
   }
 
   public curlRange(strandId: string, curl: CurlSegment): EditResult {
