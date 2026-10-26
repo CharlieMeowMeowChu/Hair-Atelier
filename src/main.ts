@@ -449,6 +449,12 @@ document.querySelector<HTMLButtonElement>('#undo')?.addEventListener('click', ()
   redraw();
 });
 document.querySelector<HTMLButtonElement>('#redo')?.addEventListener('click', () => { editor.redo(); persistState(); redraw(); });
+document.querySelector<HTMLButtonElement>('#clear-selection')?.addEventListener('click', () => {
+  selectedStrandIds.clear();
+  selectedId = undefined;
+  redraw();
+  appStatus.textContent = '已取消所有髮束選取';
+});
 document.querySelector<HTMLButtonElement>('#save')?.addEventListener('click', () => {
   appStatus.textContent = persistState() ? '已儲存到本機瀏覽器' : '瀏覽器拒絕本機儲存';
 });
