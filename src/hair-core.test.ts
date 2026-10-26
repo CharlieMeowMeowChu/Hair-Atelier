@@ -72,6 +72,18 @@ describe('HairEditor core invariants', () => {
     expect(canonicalState(editor.exportState())).toBe(initial);
   });
 
+  it('clips only selected strands down to the requested guard length', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const before = editor.exportState();
+    const results = editor.clipManyAt(['A', 'C', 'missing'], 0.06);
+    const after = editor.exportState();
+    expect(results.map((result) => result.strandId)).toEqual(['A', 'C']);
+    expect(after.strands.find((strand) => strand.id === 'A')?.length).toBe(0.06);
+    expect(after.strands.find((strand) => strand.id === 'C')?.length).toBe(0.06);
+    expect(after.strands.find((strand) => strand.id === 'B')).toEqual(before.strands.find((strand) => strand.id === 'B'));
+    expect(editor.clipManyAt(['A', 'C'], 0.06)).toEqual([]);
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;

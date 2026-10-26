@@ -57,7 +57,7 @@ const hair = new THREE.Group();
 scene.add(hair);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
 const hairLines = new Map<string, { line: THREE.Line; signature: string }>();
-type Tool = 'rotate' | 'cut' | 'curl' | 'grow';
+type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'grow';
 type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
 let selectedId: string | undefined;
@@ -135,7 +135,7 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', curl: '捲髮器：按住後向側拖', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', grow: '增髮：點按髮束' })[value];
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
@@ -193,7 +193,7 @@ function showCursor(hit: HairHit | undefined): void {
 
 let rotationX = 0;
 let rotationY = 0;
-let pointer: { x: number; y: number; hit?: HairHit; cuts: Map<string, number>; curlStartX?: number } | undefined;
+let pointer: { x: number; y: number; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number } | undefined;
 const activePointers = new Map<number, { x: number; y: number }>();
 let lastPinchDistance: number | undefined;
 function pinchDistance(): number | undefined {
@@ -205,7 +205,9 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   const hit = hitHair(event.clientX, event.clientY);
   const cuts = new Map<string, number>();
   if (hit) cuts.set(hit.id, hit.s);
-  pointer = { x: event.clientX, y: event.clientY, hit, cuts, curlStartX: event.clientX };
+  const clippedIds = new Set<string>();
+  if (hit) clippedIds.add(hit.id);
+  pointer = { x: event.clientX, y: event.clientY, hit, cuts, clippedIds, curlStartX: event.clientX };
   renderer.domElement.setPointerCapture(event.pointerId);
   lastPinchDistance = pinchDistance();
   if (tool === 'grow' && hit) {
@@ -229,6 +231,14 @@ renderer.domElement.addEventListener('pointermove', (event) => {
       previewCutS = pointer.cuts.get(latest.id);
       updateOverlay();
     }
+    return;
+  }
+  if (tool === 'clip') {
+    const hits = sweepHits(pointer.x, pointer.y, event.clientX, event.clientY);
+    hits.forEach((hit) => pointer?.clippedIds.add(hit.id));
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    showCursor(hits.at(-1));
     return;
   }
   if (tool === 'curl') { showCursor(hitHair(event.clientX, event.clientY)); return; }
@@ -266,6 +276,13 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     redraw();
     appStatus.textContent = results.length > 0 ? `一次剪短 ${results.map((result) => result.strandId).join('、')} 共 ${results.length} 束` : '剪刀未切到可移除的髮尾';
   }
+  if (tool === 'clip' && gesture.clippedIds.size > 0) {
+    const guard = Number(document.querySelector<HTMLInputElement>('#clipper-length')?.value ?? 6) / 100;
+    const results = editor.clipManyAt([...gesture.clippedIds], guard);
+    if (results.length > 0) persistState();
+    redraw();
+    appStatus.textContent = results.length > 0 ? `電剪修短 ${results.map((result) => result.strandId).join('、')} 至 ${Math.round(guard * 100)} cm` : '命中髮束已短於設定留髮長度';
+  }
   if (tool === 'curl' && gesture.hit) {
     const strand = editor.exportState().strands.find((item) => item.id === gesture.hit?.id);
     if (!strand) return;
@@ -288,6 +305,11 @@ document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => 
     document.querySelectorAll('[data-tool]').forEach((item) => item.classList.toggle('active', item === button));
     redraw();
   });
+});
+const clipperLength = document.querySelector<HTMLInputElement>('#clipper-length');
+const clipperLengthValue = document.querySelector<HTMLOutputElement>('#clipper-length-value');
+clipperLength?.addEventListener('input', () => {
+  if (clipperLengthValue) clipperLengthValue.value = `${clipperLength.value} cm`;
 });
 document.querySelector<HTMLButtonElement>('#undo')?.addEventListener('click', () => {
   editor.undo();

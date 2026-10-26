@@ -143,6 +143,11 @@ export class HairEditor {
     return results;
   }
 
+  public clipManyAt(strandIds: readonly string[], guardLengthMeters: number): readonly EditResult[] {
+    if (!Number.isFinite(guardLengthMeters) || guardLengthMeters <= 0) return [];
+    return this.cutManyAt(strandIds.map((strandId) => ({ strandId, arcLengthMeters: guardLengthMeters })));
+  }
+
   public curlRange(strandId: string, curl: CurlSegment): EditResult {
     const strand = this.state.strands.find((candidate) => candidate.id === strandId);
     if (!strand || curl.radius <= 0 || curl.pitch <= 0 || curl.startS < 0 || curl.endS <= curl.startS ||
