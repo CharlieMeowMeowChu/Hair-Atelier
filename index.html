@@ -14,14 +14,19 @@
         <h1>捲曲、剪短、再增長</h1>
         <p id="status" aria-live="polite">載入 3D 髮束中…</p>
       </header>
-      <section id="stage" aria-label="可旋轉的三維髮束樣板"></section>
-      <nav class="controls" aria-label="核心髮束操作">
-        <button id="curl">捲 C</button>
-        <button id="cut">剪 C 到一半</button>
-        <button id="grow">C 增長</button>
-        <button id="undo" class="secondary">Undo</button>
+      <section id="stage" aria-label="可操作的三維髮束樣板"></section>
+      <nav class="tools" aria-label="工具模式">
+        <button data-tool="rotate" class="active">旋轉</button>
+        <button data-tool="cut">剪刀</button>
+        <button data-tool="curl">捲髮器</button>
+        <button data-tool="grow">增髮</button>
       </nav>
-      <p class="hint">單指拖動畫面旋轉頭部；此樣板只驗證資料操作，未代表完整髮型或觸控剪刀。</p>
+      <nav class="controls" aria-label="歷史操作">
+        <button id="undo" class="secondary">Undo</button>
+        <button id="redo" class="secondary">Redo</button>
+        <button id="reset" class="secondary">重設樣板</button>
+      </nav>
+      <p class="hint">旋轉：單指拖動。剪刀：沿髮束拖動後放手。捲髮器：按住髮束再向側邊拖。增髮：點按一束髮絲。</p>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
