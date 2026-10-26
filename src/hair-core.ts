@@ -30,6 +30,11 @@ export interface EditResult {
   readonly newLength?: number;
 }
 
+export interface CutTarget {
+  readonly strandId: string;
+  readonly arcLengthMeters: number;
+}
+
 const minimumStubble = 0.01;
 const copyState = (state: HairState): HairState => structuredClone(state);
 
@@ -89,6 +94,32 @@ export class HairEditor {
     this.saveUndo();
     this.state = replaceStrand(this.state, { ...strand, length });
     return { changed: true, strandId, oldLength: strand.length, newLength: length };
+  }
+
+  public cutManyAt(targets: readonly CutTarget[]): readonly EditResult[] {
+    const shortestByStrand = new Map<string, number>();
+    for (const target of targets) {
+      if (!Number.isFinite(target.arcLengthMeters)) continue;
+      const previous = shortestByStrand.get(target.strandId);
+      if (previous === undefined || target.arcLengthMeters < previous) {
+        shortestByStrand.set(target.strandId, target.arcLengthMeters);
+      }
+    }
+
+    const results: EditResult[] = [];
+    let nextState = this.state;
+    for (const strand of this.state.strands) {
+      const requested = shortestByStrand.get(strand.id);
+      if (requested === undefined) continue;
+      const length = Math.max(minimumStubble, Math.min(requested, strand.length));
+      if (length >= strand.length) continue;
+      nextState = replaceStrand(nextState, { ...strand, length });
+      results.push({ changed: true, strandId: strand.id, oldLength: strand.length, newLength: length });
+    }
+    if (results.length === 0) return [];
+    this.saveUndo();
+    this.state = nextState;
+    return results;
   }
 
   public curlRange(strandId: string, curl: CurlSegment): EditResult {

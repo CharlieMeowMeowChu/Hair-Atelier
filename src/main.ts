@@ -16,6 +16,15 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(stage.clientWidth, stage.clientHeight);
 stage.append(renderer.domElement);
+let renderPending = false;
+function requestRender(): void {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => {
+    renderPending = false;
+    renderer.render(scene, camera);
+  });
+}
 
 scene.add(new THREE.HemisphereLight('#f4dffc', '#17141f', 2.2));
 const head = new THREE.Mesh(
@@ -29,9 +38,10 @@ const hair = new THREE.Group();
 scene.add(hair);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
 type Tool = 'rotate' | 'cut' | 'curl' | 'grow';
-type HairHit = { id: string; s: number; point: THREE.Vector3; distance: number };
+type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
-let renderedSamples: Array<HairHit> = [];
+const raycaster = new THREE.Raycaster();
+raycaster.params.Line = { threshold: 0.014 };
 const cursor = new THREE.Mesh(
   new THREE.RingGeometry(0.012, 0.016, 20),
   new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide }),
@@ -41,22 +51,18 @@ scene.add(cursor);
 
 function redraw(): void {
   hair.clear();
-  renderedSamples = [];
   for (const strand of editor.exportState().strands) {
     const sampled = sampleStrand(strand);
     const points = sampled.map(([x, y, z]) => new THREE.Vector3(x, y, z));
-    points.forEach((point, index) => renderedSamples.push({
-      id: strand.id,
-      s: (strand.length * index) / (points.length - 1),
-      point,
-      distance: 0,
-    }));
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({ color: colors[strand.id], linewidth: 2 });
-    hair.add(new THREE.Line(geometry, material));
+    const line = new THREE.Line(geometry, material);
+    line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
+    hair.add(line);
   }
   const c = editor.exportState().strands.find((strand) => strand.id === 'C');
   appStatus.textContent = c ? `${toolLabel(tool)} ｜ C：${Math.round(c.length * 100)} cm ｜ Undo ${editor.canUndo ? '可用' : '未有操作'}` : '髮束資料錯誤';
+  requestRender();
 }
 
 function toolLabel(value: Tool): string {
@@ -67,33 +73,57 @@ function hitHair(clientX: number, clientY: number): HairHit | undefined {
   const rect = renderer.domElement.getBoundingClientRect();
   const x = ((clientX - rect.left) / rect.width) * 2 - 1;
   const y = -((clientY - rect.top) / rect.height) * 2 + 1;
-  const threshold = 0.075;
-  let result: HairHit | undefined;
-  for (const sample of renderedSamples) {
-    const worldPoint = sample.point.clone().applyMatrix4(hair.matrixWorld);
-    const projected = worldPoint.clone().project(camera);
-    const distance = Math.hypot(projected.x - x, projected.y - y);
-    if (distance > threshold) continue;
-    const candidate = { ...sample, point: worldPoint, distance };
-    if (!result || candidate.distance < result.distance - 0.006 ||
-      (Math.abs(candidate.distance - result.distance) <= 0.006 && camera.position.distanceTo(candidate.point) < camera.position.distanceTo(result.point))) result = candidate;
+  raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+  scene.updateMatrixWorld(true);
+  const headDistance = raycaster.intersectObject(head, false)[0]?.distance ?? Number.POSITIVE_INFINITY;
+  const intersection = raycaster.intersectObjects(hair.children, false)
+    .find((candidate) => candidate.distance <= headDistance + 0.002);
+  if (!intersection) return undefined;
+  const { strandId, strandLength, sampleCount } = intersection.object.userData as {
+    strandId: string; strandLength: number; sampleCount: number;
+  };
+  const segmentIndex = Math.max(0, Math.min(intersection.index ?? 0, sampleCount - 1));
+  return { id: strandId, s: strandLength * segmentIndex / (sampleCount - 1), point: intersection.point.clone() };
+}
+
+function sweepHits(fromX: number, fromY: number, toX: number, toY: number): HairHit[] {
+  const distance = Math.hypot(toX - fromX, toY - fromY);
+  const steps = Math.max(1, Math.ceil(distance / 8));
+  const hits: HairHit[] = [];
+  for (let step = 1; step <= steps; step += 1) {
+    const t = step / steps;
+    const hit = hitHair(fromX + (toX - fromX) * t, fromY + (toY - fromY) * t);
+    if (hit) hits.push(hit);
   }
-  return result;
+  return hits;
+}
+
+function highlightHair(strandId?: string): void {
+  for (const child of hair.children) {
+    const material = (child as THREE.Line).material as THREE.LineBasicMaterial;
+    const id = child.userData.strandId as string;
+    material.color.set(id === strandId ? '#ffffff' : colors[id]);
+  }
+  requestRender();
 }
 
 function showCursor(hit: HairHit | undefined): void {
-  if (!hit) { cursor.visible = false; return; }
+  if (!hit) { cursor.visible = false; highlightHair(); return; }
   cursor.position.copy(hit.point);
   cursor.quaternion.copy(camera.quaternion);
   cursor.visible = true;
+  highlightHair(hit.id);
+  requestRender();
 }
 
 let rotationX = 0;
 let rotationY = 0;
-let pointer: { x: number; y: number; hit?: HairHit; cutS?: number; curlStartX?: number } | undefined;
+let pointer: { x: number; y: number; hit?: HairHit; cuts: Map<string, number>; curlStartX?: number } | undefined;
 renderer.domElement.addEventListener('pointerdown', (event) => {
   const hit = hitHair(event.clientX, event.clientY);
-  pointer = { x: event.clientX, y: event.clientY, hit, cutS: hit?.s, curlStartX: event.clientX };
+  const cuts = new Map<string, number>();
+  if (hit) cuts.set(hit.id, hit.s);
+  pointer = { x: event.clientX, y: event.clientY, hit, cuts, curlStartX: event.clientX };
   renderer.domElement.setPointerCapture(event.pointerId);
   if (tool === 'grow' && hit) {
     editor.growBy(hit.id, 0.05);
@@ -104,31 +134,36 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
 renderer.domElement.addEventListener('pointermove', (event) => {
   if (!pointer) return;
   if (tool === 'cut') {
-    const hit = hitHair(event.clientX, event.clientY);
-    if (hit && pointer.hit && hit.id === pointer.hit.id) pointer.cutS = Math.min(pointer.cutS ?? hit.s, hit.s);
-    showCursor(hit);
+    const hits = sweepHits(pointer.x, pointer.y, event.clientX, event.clientY);
+    for (const hit of hits) pointer.cuts.set(hit.id, Math.min(pointer.cuts.get(hit.id) ?? hit.s, hit.s));
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    showCursor(hits.at(-1));
     return;
   }
   if (tool === 'curl') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   rotationY += (event.clientX - pointer.x) * 0.01;
   rotationX = THREE.MathUtils.clamp(rotationX + (event.clientY - pointer.y) * 0.008, -0.45, 0.45);
-  pointer = { x: event.clientX, y: event.clientY };
+  pointer.x = event.clientX;
+  pointer.y = event.clientY;
   hair.rotation.set(rotationX, rotationY, 0);
   head.rotation.set(rotationX, rotationY, 0);
+  requestRender();
 });
 function finishGesture(event: PointerEvent, cancelled = false): void {
   if (!pointer) return;
   const gesture = pointer;
   pointer = undefined;
   cursor.visible = false;
-  if (cancelled || !gesture.hit) return;
-  if (tool === 'cut' && gesture.cutS !== undefined) {
-    const result = editor.cutAt(gesture.hit.id, gesture.cutS);
+  highlightHair();
+  if (cancelled) return;
+  if (tool === 'cut' && gesture.cuts.size > 0) {
+    const results = editor.cutManyAt([...gesture.cuts].map(([strandId, arcLengthMeters]) => ({ strandId, arcLengthMeters })));
     redraw();
-    appStatus.textContent = result.changed ? `已剪短 ${gesture.hit.id} 至 ${Math.round(result.newLength! * 100)} cm` : '剪刀未切到可移除的髮尾';
+    appStatus.textContent = results.length > 0 ? `一次剪短 ${results.map((result) => result.strandId).join('、')} 共 ${results.length} 束` : '剪刀未切到可移除的髮尾';
   }
-  if (tool === 'curl') {
+  if (tool === 'curl' && gesture.hit) {
     const strand = editor.exportState().strands.find((item) => item.id === gesture.hit?.id);
     if (!strand) return;
     const direction = event.clientX - (gesture.curlStartX ?? event.clientX) >= 0 ? 1 : -1;
@@ -140,6 +175,8 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
 }
 renderer.domElement.addEventListener('pointerup', (event) => finishGesture(event));
 renderer.domElement.addEventListener('pointercancel', (event) => finishGesture(event, true));
+renderer.domElement.addEventListener('pointerleave', () => { if (!pointer) showCursor(undefined); });
+renderer.domElement.addEventListener('pointermove', (event) => { if (!pointer && tool !== 'rotate') showCursor(hitHair(event.clientX, event.clientY)); });
 
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => {
   button.addEventListener('click', () => {
@@ -160,8 +197,8 @@ new ResizeObserver(() => {
   camera.aspect = clientWidth / clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(clientWidth, clientHeight);
+  requestRender();
 }).observe(stage);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => undefined);
 redraw();
-renderer.setAnimationLoop(() => renderer.render(scene, camera));

@@ -57,4 +57,18 @@ describe('HairEditor core invariants', () => {
     expect(editor.cutAt('C', Number.NaN).changed).toBe(false);
     expect(editor.cutAt('missing', 0.1).changed).toBe(false);
   });
+
+  it('commits a multi-strand scissors sweep as one undo command', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const initial = canonicalState(editor.exportState());
+    const results = editor.cutManyAt([
+      { strandId: 'A', arcLengthMeters: 0.2 },
+      { strandId: 'A', arcLengthMeters: 0.12 },
+      { strandId: 'B', arcLengthMeters: 0.18 },
+      { strandId: 'missing', arcLengthMeters: 0.1 },
+    ]);
+    expect(results.map((result) => [result.strandId, result.newLength])).toEqual([['A', 0.12], ['B', 0.18]]);
+    editor.undo();
+    expect(canonicalState(editor.exportState())).toBe(initial);
+  });
 });
