@@ -71,7 +71,7 @@ const tieMarkerPool = new Map<string, THREE.Mesh>();
 hair.add(tieMarkers);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
 const hairLines = new Map<string, { line: THREE.Line; signature: string }>();
-type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'halfup' | 'pair' | 'grow';
+type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'halfup' | 'pair' | 'braid' | 'grow';
 type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
 let selectedId: string | undefined;
@@ -162,7 +162,7 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：點按任一髮束', halfup: '公主頭：點按任一髮束', pair: '兩束綁：點按任一髮束', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：點按任一髮束', halfup: '公主頭：點按任一髮束', pair: '兩束綁：點按任一髮束', braid: '三股辮：點按任一髮束', grow: '增髮：點按髮束' })[value];
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
@@ -274,6 +274,13 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     if (results.length > 0) persistState();
     redraw();
     appStatus.textContent = results.length > 0 ? '已把兩組髮束綁到同一位置' : '髮束已綁定或長度不足';
+  } else if (tool === 'braid' && hit) {
+    const results = editor.braidStrands(['B', 'C', 'D'], {
+      id: 'braid-demo', axisOrigin: [0.04, 0.22, -0.02], startS: 0.04, endS: 0.24, radius: 0.018, pitch: 0.055,
+    });
+    if (results.length > 0) persistState();
+    redraw();
+    appStatus.textContent = results.length > 0 ? '已以 B、C、D 建立三股辮路徑' : '髮束已編成辮或長度不足';
   } else if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {

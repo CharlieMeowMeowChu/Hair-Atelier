@@ -168,6 +168,22 @@ describe('HairEditor core invariants', () => {
     expect(editor.exportState().strands.every((strand) => strand.tie === undefined)).toBe(true);
   });
 
+  it('creates three distinct procedural braid paths while keeping roots fixed', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const before = editor.exportState();
+    const results = editor.braidStrands(['B', 'C', 'D'], {
+      id: 'braid-demo', axisOrigin: [0.04, 0.22, -0.02], startS: 0.04, endS: 0.24, radius: 0.018, pitch: 0.055,
+    });
+    const after = editor.exportState();
+    const paths = ['B', 'C', 'D'].map((id) => pointAt(after.strands.find((strand) => strand.id === id)!, 0.18));
+    expect(results).toHaveLength(3);
+    expect(paths[0]).not.toEqual(paths[1]);
+    expect(paths[1]).not.toEqual(paths[2]);
+    expect(pointAt(after.strands.find((strand) => strand.id === 'B')!, 0)).toEqual(before.strands.find((strand) => strand.id === 'B')!.root);
+    editor.cutAt('C', 0.2);
+    expect(editor.exportState().strands.find((strand) => strand.id === 'C')?.braid?.id).toBe('braid-demo');
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;

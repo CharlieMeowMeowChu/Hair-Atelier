@@ -16,6 +16,7 @@ export interface GuideStrand {
   readonly partingOffset?: Vec3;
   readonly earTuck?: 'left' | 'right';
   readonly tie?: HairTie;
+  readonly braid?: BraidConstraint;
   readonly length: number;
   readonly maximumLength: number;
   readonly curls: readonly CurlSegment[];
@@ -30,6 +31,16 @@ export interface HairTie {
 export interface TieGroup {
   readonly strandIds: readonly string[];
   readonly tie: HairTie;
+}
+
+export interface BraidConstraint {
+  readonly id: string;
+  readonly index: 0 | 1 | 2;
+  readonly axisOrigin: Vec3;
+  readonly startS: number;
+  readonly endS: number;
+  readonly radius: number;
+  readonly pitch: number;
 }
 
 export interface HairState {
@@ -79,6 +90,9 @@ export function parseHairState(serialized: string): HairState | undefined {
         (candidate.partingOffset === undefined || vectorIsValid(candidate.partingOffset)) &&
         (candidate.earTuck === undefined || candidate.earTuck === 'left' || candidate.earTuck === 'right') &&
         (candidate.tie === undefined || typeof candidate.tie.id === 'string' && vectorIsValid(candidate.tie.anchor) && Number.isFinite(candidate.tie.gatherS) && candidate.tie.gatherS > 0) &&
+        (candidate.braid === undefined || typeof candidate.braid.id === 'string' && [0, 1, 2].includes(candidate.braid.index) && vectorIsValid(candidate.braid.axisOrigin) &&
+          Number.isFinite(candidate.braid.startS) && Number.isFinite(candidate.braid.endS) && candidate.braid.endS > candidate.braid.startS &&
+          Number.isFinite(candidate.braid.radius) && candidate.braid.radius > 0 && Number.isFinite(candidate.braid.pitch) && candidate.braid.pitch > 0) &&
         Number.isFinite(candidate.length) && Number.isFinite(candidate.maximumLength) && candidate.length! >= 0 && candidate.maximumLength! >= candidate.length! &&
         Array.isArray(candidate.curls) && candidate.curls.every((curl) => curl && Number.isFinite(curl.startS) && Number.isFinite(curl.endS) &&
           Number.isFinite(curl.radius) && Number.isFinite(curl.pitch) && Number.isFinite(curl.phase) && curl.startS >= 0 && curl.endS > curl.startS &&
@@ -115,7 +129,7 @@ function pointWithoutTie(strand: GuideStrand, s: number): Vec3 {
   return base;
 }
 
-export function pointAt(strand: GuideStrand, s: number): Vec3 {
+function pointWithoutBraid(strand: GuideStrand, s: number): Vec3 {
   const clampedS = Math.max(0, Math.min(s, strand.length));
   const base = pointWithoutTie(strand, clampedS);
   if (!strand.tie) return base;
@@ -128,6 +142,30 @@ export function pointAt(strand: GuideStrand, s: number): Vec3 {
     base[1] + (strand.tie.anchor[1] - gatherPoint[1]) * ease,
     base[2] + (strand.tie.anchor[2] - gatherPoint[2]) * ease,
   ];
+}
+
+export function pointAt(strand: GuideStrand, s: number): Vec3 {
+  const clampedS = Math.max(0, Math.min(s, strand.length));
+  const base = pointWithoutBraid(strand, clampedS);
+  if (!strand.braid) return base;
+  const braid = strand.braid;
+  const braidS = Math.max(braid.startS, Math.min(clampedS, braid.endS));
+  const progress = (braidS - braid.startS) / (braid.endS - braid.startS);
+  const phase = braid.index * (Math.PI * 2 / 3) + ((braidS - braid.startS) / braid.pitch) * Math.PI * 2;
+  const target: Vec3 = [
+    braid.axisOrigin[0] + Math.cos(phase) * braid.radius,
+    braid.axisOrigin[1] - (braidS - braid.startS),
+    braid.axisOrigin[2] - progress * 0.1 + Math.sin(phase) * braid.radius,
+  ];
+  const transition = Math.max(0, Math.min(1, (braidS - braid.startS) / 0.1));
+  const ease = transition * transition * (3 - 2 * transition);
+  const baseAtBraidS = pointWithoutBraid(strand, braidS);
+  const correction: Vec3 = [
+    (target[0] - baseAtBraidS[0]) * ease,
+    (target[1] - baseAtBraidS[1]) * ease,
+    (target[2] - baseAtBraidS[2]) * ease,
+  ];
+  return [base[0] + correction[0], base[1] + correction[1], base[2] + correction[2]];
 }
 
 export function sampleStrand(strand: GuideStrand, segments = 40): Vec3[] {
@@ -252,6 +290,24 @@ export class HairEditor {
       strands: this.state.strands.map((strand) => {
         const tie = assignment.get(strand.id);
         return tie && strand.length > tie.gatherS ? { ...strand, tie } : strand;
+      }),
+    };
+    return eligible.map((strand) => ({ changed: true, strandId: strand.id, oldLength: strand.length, newLength: strand.length }));
+  }
+
+  public braidStrands(strandIds: readonly [string, string, string], braid: Omit<BraidConstraint, 'index'>): readonly EditResult[] {
+    if (!braid.id || !braid.axisOrigin.every(Number.isFinite) || !Number.isFinite(braid.startS) || !Number.isFinite(braid.endS) ||
+      braid.endS <= braid.startS || !Number.isFinite(braid.radius) || braid.radius <= 0 || !Number.isFinite(braid.pitch) || braid.pitch <= 0) return [];
+    const eligible = strandIds.map((id) => this.state.strands.find((strand) => strand.id === id)).filter((strand): strand is GuideStrand =>
+      Boolean(strand) && strand!.length > braid.endS && strand!.braid?.id !== braid.id);
+    if (eligible.length !== 3) return [];
+    this.saveUndo();
+    const indexById = new Map(strandIds.map((id, index) => [id, index as 0 | 1 | 2]));
+    this.state = {
+      ...this.state,
+      strands: this.state.strands.map((strand) => {
+        const index = indexById.get(strand.id);
+        return index === undefined ? strand : { ...strand, braid: { ...braid, index } };
       }),
     };
     return eligible.map((strand) => ({ changed: true, strandId: strand.id, oldLength: strand.length, newLength: strand.length }));
