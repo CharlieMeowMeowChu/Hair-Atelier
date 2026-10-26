@@ -13,6 +13,7 @@
 | 本機 Chromium browser smoke | PASS | 2026-10-27：以 430×932 headless Chromium 載入 canvas；重載後 Service Worker controller 存在、favicon 存在，無 page error／console error；這不是 Safari 真機證據 |
 | 觸控界面實作 | IMPLEMENTED | `pointerdown/move/up/cancel` 旋轉 3D 畫面；畫面與按鈕有 touch-action 限制 |
 | 自由檢視手勢 | IMPLEMENTED | 單指可水平旋轉與上下傾斜；兩指 pinch 可在 0.72–2.2 m 相機距離內縮放；尚未真機驗證手勢細節 |
+| 回正面視角 | IMPLEMENTED | 將水平／垂直旋轉及縮放重設為固定正面視角；不修改任何 HairState 或 Undo／Redo 歷史 |
 | 觸控剪／捲／增長原型 | IMPLEMENTED | 剪刀以畫面取樣命中並累積拖掃最低弧長，放手才 Cut；捲髮器對命中束的局部區間建立 Curl；增髮只對點按的髮束 Grow；Undo／Redo／重設可用 |
 | 電剪原型 | IMPLEMENTED | 1–20 cm 可調 guard length；拖掃命中束後放手才以該長度修短，已短於 guard 的髮束不變；一次手勢一個 Undo |
 | 梳子／手指撥髮原型 | IMPLEMENTED | 命中髮束後拖動以可保存的導引方向偏移撥髮；髮根固定，剪後保留段、增長與保存均保留該方向資料 |

@@ -235,6 +235,11 @@ function showCursor(hit: HairHit | undefined): void {
 
 let rotationX = 0;
 let rotationY = 0;
+function applyViewRotation(): void {
+  hair.rotation.set(rotationX, rotationY, 0);
+  headRig.rotation.set(rotationX, rotationY, 0);
+  requestRender();
+}
 let pointer: { x: number; y: number; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number; combStart?: { x: number; y: number } } | undefined;
 const activePointers = new Map<number, { x: number; y: number }>();
 let lastPinchDistance: number | undefined;
@@ -365,9 +370,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   rotationX = MathUtils.clamp(rotationX + (event.clientY - pointer.y) * 0.008, -0.45, 0.45);
   pointer.x = event.clientX;
   pointer.y = event.clientY;
-  hair.rotation.set(rotationX, rotationY, 0);
-  headRig.rotation.set(rotationX, rotationY, 0);
-  requestRender();
+  applyViewRotation();
 });
 function finishGesture(event: PointerEvent, cancelled = false): void {
   activePointers.delete(event.pointerId);
@@ -462,6 +465,13 @@ document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', (
   selectedId = undefined;
   persistState();
   redraw();
+});
+document.querySelector<HTMLButtonElement>('#front')?.addEventListener('click', () => {
+  rotationX = 0;
+  rotationY = 0;
+  camera.position.z = 1.35;
+  applyViewRotation();
+  appStatus.textContent = '已回到正面視角';
 });
 
 new ResizeObserver(() => {
