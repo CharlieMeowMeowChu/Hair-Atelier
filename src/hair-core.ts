@@ -6,6 +6,7 @@ export interface CurlSegment {
   readonly radius: number;
   readonly pitch: number;
   readonly phase: number;
+  readonly direction: -1 | 1;
 }
 
 export interface GuideStrand {
@@ -52,21 +53,19 @@ export function canonicalState(state: HairState): string {
 
 export function pointAt(strand: GuideStrand, s: number): Vec3 {
   const clampedS = Math.max(0, Math.min(s, strand.length));
-  const base: Vec3 = [
+  const base: [number, number, number] = [
     strand.root[0] + strand.direction[0] * clampedS,
     strand.root[1] + strand.direction[1] * clampedS,
     strand.root[2] + strand.direction[2] * clampedS,
   ];
-  const curl = strand.curls.find((segment) => clampedS >= segment.startS && clampedS <= segment.endS);
-  if (!curl) return base;
-
-  const phaseAtStart = curl.phase;
-  const phase = curl.phase + ((clampedS - curl.startS) / curl.pitch) * Math.PI * 2;
-  return [
-    base[0] + curl.radius * (Math.cos(phase) - Math.cos(phaseAtStart)),
-    base[1],
-    base[2] + curl.radius * (Math.sin(phase) - Math.sin(phaseAtStart)),
-  ];
+  for (const curl of strand.curls) {
+    const curlS = Math.max(curl.startS, Math.min(clampedS, curl.endS));
+    if (curlS <= curl.startS) continue;
+    const phase = curl.phase + curl.direction * ((curlS - curl.startS) / curl.pitch) * Math.PI * 2;
+    base[0] += curl.radius * (Math.cos(phase) - Math.cos(curl.phase));
+    base[2] += curl.radius * (Math.sin(phase) - Math.sin(curl.phase));
+  }
+  return base;
 }
 
 export function sampleStrand(strand: GuideStrand, segments = 40): Vec3[] {
@@ -124,7 +123,8 @@ export class HairEditor {
 
   public curlRange(strandId: string, curl: CurlSegment): EditResult {
     const strand = this.state.strands.find((candidate) => candidate.id === strandId);
-    if (!strand || curl.radius <= 0 || curl.pitch <= 0 || curl.startS < 0 || curl.endS <= curl.startS) {
+    if (!strand || curl.radius <= 0 || curl.pitch <= 0 || curl.startS < 0 || curl.endS <= curl.startS ||
+      (curl.direction !== -1 && curl.direction !== 1)) {
       return { changed: false, reason: 'Invalid curl', strandId };
     }
     const limited = { ...curl, endS: Math.min(curl.endS, strand.length) };

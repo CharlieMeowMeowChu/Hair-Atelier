@@ -16,7 +16,7 @@ describe('HairEditor core invariants', () => {
 
   it('preserves the curled prefix after a cut', () => {
     const editor = new HairEditor(createDemoHairState());
-    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3 });
+    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 });
     const curled = editor.exportState().strands.find((strand) => strand.id === 'C')!;
     const samples = [0.04, 0.08, 0.12, 0.16].map((s) => pointAt(curled, s));
     editor.cutAt('C', 0.2);
@@ -30,7 +30,7 @@ describe('HairEditor core invariants', () => {
 
   it('grows without scaling or straightening retained curl', () => {
     const editor = new HairEditor(createDemoHairState());
-    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0 });
+    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0, direction: 1 });
     editor.cutAt('C', 0.2);
     const beforeGrow = editor.exportState().strands.find((strand) => strand.id === 'C')!;
     const retained = pointAt(beforeGrow, 0.16);
@@ -43,7 +43,7 @@ describe('HairEditor core invariants', () => {
   it('restores serialized state through undo and redo', () => {
     const editor = new HairEditor(createDemoHairState());
     const initial = canonicalState(editor.exportState());
-    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0 });
+    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0, direction: 1 });
     editor.cutAt('C', 0.2);
     const edited = canonicalState(editor.exportState());
     editor.undo(); editor.undo();
@@ -88,7 +88,7 @@ describe('HairEditor core invariants', () => {
   it('keeps the root fixed through curl, cut, growth, undo and redo', () => {
     const editor = new HairEditor(createDemoHairState());
     const root = editor.exportState().strands.find((strand) => strand.id === 'C')!.root;
-    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0 });
+    editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0, direction: 1 });
     editor.cutAt('C', 0.2);
     editor.growBy('C', 0.1);
     editor.undo();
@@ -108,10 +108,36 @@ describe('HairEditor core invariants', () => {
     const editor = new HairEditor(createDemoHairState());
     editor.cutAt('C', 0.2);
     const before = canonicalState(editor.exportState());
-    const result = editor.curlRange('C', { startS: 0.25, endS: 0.35, radius: 0.025, pitch: 0.08, phase: 0 });
+    const result = editor.curlRange('C', { startS: 0.25, endS: 0.35, radius: 0.025, pitch: 0.08, phase: 0, direction: 1 });
     expect(result.changed).toBe(false);
     expect(canonicalState(editor.exportState())).toBe(before);
     editor.undo();
     expect(editor.exportState().strands.find((strand) => strand.id === 'C')?.length).toBe(0.4);
+  });
+
+  it('keeps a local curl endpoint continuous into the downstream strand', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.curlRange('C', { startS: 0.04, endS: 0.2, radius: 0.025, pitch: 0.09, phase: 0.2, direction: 1 });
+    const strand = editor.exportState().strands.find((item) => item.id === 'C')!;
+    const atEnd = pointAt(strand, 0.2);
+    const afterEnd = pointAt(strand, 0.2001);
+    expect(Math.abs(atEnd[0] - afterEnd[0])).toBeLessThan(1e-9);
+    expect(Math.abs(atEnd[2] - afterEnd[2])).toBeLessThan(1e-9);
+    expect(Math.abs(atEnd[1] - afterEnd[1])).toBeCloseTo(0.0001);
+  });
+
+  it('stores and applies clockwise and counter-clockwise curl directions', () => {
+    const positive = new HairEditor(createDemoHairState());
+    const negative = new HairEditor(createDemoHairState());
+    positive.curlRange('C', { startS: 0.04, endS: 0.3, radius: 0.025, pitch: 0.08, phase: 0, direction: 1 });
+    negative.curlRange('C', { startS: 0.04, endS: 0.3, radius: 0.025, pitch: 0.08, phase: 0, direction: -1 });
+    const positiveStrand = positive.exportState().strands.find((item) => item.id === 'C')!;
+    const negativeStrand = negative.exportState().strands.find((item) => item.id === 'C')!;
+    expect(positiveStrand.curls[0].direction).toBe(1);
+    expect(negativeStrand.curls[0].direction).toBe(-1);
+    const positivePoint = pointAt(positiveStrand, 0.07);
+    const negativePoint = pointAt(negativeStrand, 0.07);
+    expect(positivePoint[0]).toBeCloseTo(negativePoint[0]);
+    expect(positivePoint[2] - positiveStrand.root[2]).toBeCloseTo(-(negativePoint[2] - negativeStrand.root[2]));
   });
 });

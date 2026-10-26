@@ -201,7 +201,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     if (!strand) return;
     const direction = event.clientX - (gesture.curlStartX ?? event.clientX) >= 0 ? 1 : -1;
     const startS = Math.max(0.01, gesture.hit.s - 0.04);
-    const result = editor.curlRange(strand.id, { startS, endS: strand.length, radius: 0.025, pitch: 0.08, phase: direction * 0.3 });
+    const result = editor.curlRange(strand.id, { startS, endS: strand.length, radius: 0.025, pitch: 0.08, phase: 0.3, direction });
     redraw();
     appStatus.textContent = result.changed ? `已捲曲 ${strand.id} 的 ${Math.round(startS * 100)} cm 至髮尾` : '未能建立捲曲';
   }
