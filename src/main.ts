@@ -242,12 +242,16 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     redraw();
     appStatus.textContent = result.changed ? `已將 ${hit.id} 夾到${side === 'left' ? '左' : '右'}耳後` : '此髮束已在指定耳後';
   } else if (tool === 'ponytail' && hit) {
+    const height = document.querySelector<HTMLSelectElement>('#ponytail-height')?.value === 'high' ? 'high' : 'low';
+    const tie = height === 'high'
+      ? { id: 'pony-high', anchor: [0, 0.17, -0.16] as THREE.Vector3Tuple, gatherS: 0.14 }
+      : { id: 'pony-low', anchor: [0, 0.02, -0.18] as THREE.Vector3Tuple, gatherS: 0.16 };
     const results = editor.tieStrands(editor.exportState().strands.map((strand) => strand.id), {
-      id: 'pony-low', anchor: [0, 0.02, -0.18], gatherS: 0.16,
+      ...tie,
     });
     if (results.length > 0) persistState();
     redraw();
-    appStatus.textContent = results.length > 0 ? `已將 ${results.length} 束髮綁成低馬尾` : '髮束已綁定或長度不足';
+    appStatus.textContent = results.length > 0 ? `已將 ${results.length} 束髮綁成${height === 'high' ? '高' : '低'}馬尾` : '髮束已綁定或長度不足';
   } else if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {

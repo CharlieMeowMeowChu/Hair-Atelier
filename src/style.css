@@ -17,6 +17,8 @@ h1 { margin: 0; font-size: clamp(1.65rem, 6vw, 2.35rem); letter-spacing: -.04em;
 .clipper-setting input { width: 100%; accent-color: #ff9cba; }
 .clipper-setting output { grid-column: 3; grid-row: 1; color: #fff8ff; font: 700 .72rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .clipper-setting input { grid-column: 2; grid-row: 1; }
+.tie-setting { display: flex; align-items: center; justify-content: space-between; margin: -2px 4px 0; color: #d5cadc; font-size: .78rem; }
+.tie-setting select { min-height: 34px; border: 1px solid #65576a; border-radius: 10px; color: #fff8ff; background: #302733; font: inherit; padding: 0 8px; }
 button { min-height: 50px; border: 0; border-radius: 15px; color: #261b24; background: #ffccd8; font: inherit; font-weight: 800; cursor: pointer; touch-action: manipulation; }
 button:active { transform: scale(.98); }
 button.secondary { color: #f7ecf5; background: #3d3442; }

@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| CoreHair 單元測試 | PASS | Vitest：1 test file、19 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、分界不清除梳髮方向、左右夾耳狀態與 Undo、馬尾錨點與捲尾相對幾何、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向及保存資料驗證 |
+| CoreHair 單元測試 | PASS | Vitest：1 test file、20 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、分界不清除梳髮方向、左右夾耳狀態與 Undo、高低馬尾錨點與捲尾相對幾何、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向及保存資料驗證 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
@@ -17,7 +17,7 @@
 | 梳子／手指撥髮原型 | IMPLEMENTED | 命中髮束後拖動以可保存的導引方向偏移撥髮；髮根固定，剪後保留段、增長與保存均保留該方向資料 |
 | 分界原型 | IMPLEMENTED | 頭皮區域水平拖動，按髮根相對分界位置重新導向左右束；根部固定、既有梳髮 direction 不被清除；尚未有頭皮貼合線及區域平滑插值 |
 | 夾耳後原型 | IMPLEMENTED | 點按髮束按其髮根左右側導向對應耳後，左右狀態可獨立保存及 Undo；場景有基本耳朵幾何作定位，尚未做逐束耳朵碰撞或完整耳後軌跡約束 |
-| 馬尾原型 | IMPLEMENTED | 點按任一髮束，把符合長度的導引束以同一後方低位錨點匯合；髮根固定、錨點後尾段保留自身長度及捲曲相對幾何，非預製髮型切換；目前只有低馬尾及基本髮圈標記 |
+| 馬尾原型 | IMPLEMENTED | 可選高／低位；點按任一髮束，把符合長度的導引束以同一後方錨點匯合；髮根固定、錨點後尾段保留自身長度及捲曲相對幾何，非預製髮型切換；目前只有高低馬尾及基本髮圈標記 |
 | 剪刀預覽及遮擋 | IMPLEMENTED | Three.js Raycaster 對髮束線段拾取；若頭部交點較近便排除後方髮束；命中束轉白並顯示切口環形預覽 |
 | 剪刀游標 | IMPLEMENTED | 命中髮束時顯示相機朝向的雙刃剪刀游標；未命中或離開畫面時隱藏 |
 | 快速拖掃 | IMPLEMENTED | 兩個 PointerEvent 之間每 8 px 補取樣；一次手勢可剪多束，並合併成單一 Undo 指令 |

@@ -135,6 +135,14 @@ describe('HairEditor core invariants', () => {
     afterDelta.forEach((value, index) => expect(value).toBeCloseTo(beforeDelta[index]));
   });
 
+  it('allows a tied group to move predictably between low and high anchors', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.tieStrands(['A', 'B', 'C', 'D'], { id: 'pony-low', anchor: [0, 0.02, -0.18], gatherS: 0.16 });
+    const high = editor.tieStrands(['A', 'B', 'C', 'D'], { id: 'pony-high', anchor: [0, 0.17, -0.16], gatherS: 0.14 });
+    expect(high).toHaveLength(4);
+    expect(editor.exportState().strands.every((strand) => strand.tie?.id === 'pony-high')).toBe(true);
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;
