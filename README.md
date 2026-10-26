@@ -9,12 +9,15 @@
 在 repo 根目錄：
 
 ```bash
+nvm use
 npm ci
 npm run check
 npm run dev
 ```
 
 `npm run check` 執行核心不變條件測試，然後 TypeScript production build。瀏覽器開啟後可拖動旋轉，並可對 C 髮束執行「捲 C → 剪 C 到一半 → C 增長 → Undo」。這是 4 條 GuideStrand 的技術樣板，未代表全頭髮、真人資產、精確剪刀拾取或真機效能已完成。
+
+GitHub Actions 在 push 與 PR 使用 `.nvmrc` 的 Node.js 24.19.0 重跑 `npm ci` 與 `npm run check`。
 
 PWA manifest 與 service worker 已建立；暫不部署。請用 iPhone 16 Pro Max 及 iPad A16 的 Safari 作後續真機驗證，不能用桌面結果取代。
 

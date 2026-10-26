@@ -6,11 +6,11 @@
 
 | 工具／套件 | 鎖定來源 | 狀態 |
 |---|---|---|
-| Node.js | 本工作環境 v24.19.0 | 實測 `npm run check` |
+| Node.js | 24.19.0（`.nvmrc`、`package.json` engines、GitHub Actions） | 實測 `npm run check`；CI 使用同一精確版本 |
 | TypeScript | package-lock.json | production typecheck／build PASS |
 | Three.js | package-lock.json | Three.js WebGL 技術樣板已使用 |
 | Vite | package-lock.json | production build PASS |
-| Vitest | package-lock.json | 5 項 HairEditor core test PASS |
+| Vitest | package-lock.json | 25 項 HairEditor core tests PASS |
 | Safari iPhone 16 Pro Max／iPad A16 | 待真機實測 | 未測，不能由桌面代替 |
 
 ## 已淘汰路徑的歷史紀錄
