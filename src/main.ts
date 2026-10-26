@@ -60,6 +60,15 @@ const cursor = new THREE.Mesh(
 );
 cursor.visible = false;
 scene.add(cursor);
+const scissorsCursor = new THREE.Group();
+const bladeGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.028, -0.014, 0), new THREE.Vector3(0.028, 0.014, 0)]);
+const bladeMaterial = new THREE.LineBasicMaterial({ color: '#ffd2e0' });
+const bladeA = new THREE.Line(bladeGeometry, bladeMaterial);
+const bladeB = bladeA.clone();
+bladeB.rotation.z = Math.PI / 2;
+scissorsCursor.add(bladeA, bladeB, new THREE.Mesh(new THREE.CircleGeometry(0.006, 16), new THREE.MeshBasicMaterial({ color: '#ffffff' })));
+scissorsCursor.visible = false;
+scene.add(scissorsCursor);
 
 function redraw(): void {
   const startedAt = performance.now();
@@ -159,10 +168,13 @@ function showCursor(hit: HairHit | undefined): void {
   selectedId = hit?.id;
   previewCutS = tool === 'cut' ? hit?.s : undefined;
   updateOverlay();
-  if (!hit) { cursor.visible = false; highlightHair(); return; }
+  if (!hit) { cursor.visible = false; scissorsCursor.visible = false; highlightHair(); return; }
   cursor.position.copy(hit.point);
   cursor.quaternion.copy(camera.quaternion);
-  cursor.visible = true;
+  cursor.visible = tool !== 'cut';
+  scissorsCursor.position.copy(hit.point);
+  scissorsCursor.quaternion.copy(camera.quaternion);
+  scissorsCursor.visible = tool === 'cut';
   highlightHair(hit.id);
   requestRender();
 }
@@ -170,12 +182,20 @@ function showCursor(hit: HairHit | undefined): void {
 let rotationX = 0;
 let rotationY = 0;
 let pointer: { x: number; y: number; hit?: HairHit; cuts: Map<string, number>; curlStartX?: number } | undefined;
+const activePointers = new Map<number, { x: number; y: number }>();
+let lastPinchDistance: number | undefined;
+function pinchDistance(): number | undefined {
+  const points = [...activePointers.values()];
+  return points.length === 2 ? Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y) : undefined;
+}
 renderer.domElement.addEventListener('pointerdown', (event) => {
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   const hit = hitHair(event.clientX, event.clientY);
   const cuts = new Map<string, number>();
   if (hit) cuts.set(hit.id, hit.s);
   pointer = { x: event.clientX, y: event.clientY, hit, cuts, curlStartX: event.clientX };
   renderer.domElement.setPointerCapture(event.pointerId);
+  lastPinchDistance = pinchDistance();
   if (tool === 'grow' && hit) {
     editor.growBy(hit.id, 0.05);
     redraw();
@@ -183,6 +203,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   } else if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {
+  if (activePointers.has(event.pointerId)) activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (!pointer) return;
   if (tool === 'cut') {
     const hits = sweepHits(pointer.x, pointer.y, event.clientX, event.clientY);
@@ -199,6 +220,13 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   }
   if (tool === 'curl') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
+  const nextPinchDistance = pinchDistance();
+  if (nextPinchDistance && lastPinchDistance) {
+    camera.position.z = THREE.MathUtils.clamp(camera.position.z - (nextPinchDistance - lastPinchDistance) * 0.0025, 0.72, 2.2);
+    lastPinchDistance = nextPinchDistance;
+    requestRender();
+    return;
+  }
   rotationY += (event.clientX - pointer.x) * 0.01;
   rotationX = THREE.MathUtils.clamp(rotationX + (event.clientY - pointer.y) * 0.008, -0.45, 0.45);
   pointer.x = event.clientX;
@@ -208,10 +236,13 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   requestRender();
 });
 function finishGesture(event: PointerEvent, cancelled = false): void {
+  activePointers.delete(event.pointerId);
+  lastPinchDistance = pinchDistance();
   if (!pointer) return;
   const gesture = pointer;
   pointer = undefined;
   cursor.visible = false;
+  scissorsCursor.visible = false;
   previewCutS = undefined;
   updateOverlay();
   highlightHair();
