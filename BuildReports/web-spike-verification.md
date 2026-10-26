@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| CoreHair 單元測試 | PASS | Vitest：1 test file、16 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向及保存資料驗證 |
+| CoreHair 單元測試 | PASS | Vitest：1 test file、17 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、分界不清除梳髮方向、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向及保存資料驗證 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
@@ -15,6 +15,7 @@
 | 觸控剪／捲／增長原型 | IMPLEMENTED | 剪刀以畫面取樣命中並累積拖掃最低弧長，放手才 Cut；捲髮器對命中束的局部區間建立 Curl；增髮只對點按的髮束 Grow；Undo／Redo／重設可用 |
 | 電剪原型 | IMPLEMENTED | 1–20 cm 可調 guard length；拖掃命中束後放手才以該長度修短，已短於 guard 的髮束不變；一次手勢一個 Undo |
 | 梳子／手指撥髮原型 | IMPLEMENTED | 命中髮束後拖動以可保存的導引方向偏移撥髮；髮根固定，剪後保留段、增長與保存均保留該方向資料 |
+| 分界原型 | IMPLEMENTED | 頭皮區域水平拖動，按髮根相對分界位置重新導向左右束；根部固定、既有梳髮 direction 不被清除；尚未有頭皮貼合線及區域平滑插值 |
 | 剪刀預覽及遮擋 | IMPLEMENTED | Three.js Raycaster 對髮束線段拾取；若頭部交點較近便排除後方髮束；命中束轉白並顯示切口環形預覽 |
 | 剪刀游標 | IMPLEMENTED | 命中髮束時顯示相機朝向的雙刃剪刀游標；未命中或離開畫面時隱藏 |
 | 快速拖掃 | IMPLEMENTED | 兩個 PointerEvent 之間每 8 px 補取樣；一次手勢可剪多束，並合併成單一 Undo 指令 |

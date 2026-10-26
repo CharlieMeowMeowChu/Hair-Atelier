@@ -96,6 +96,18 @@ describe('HairEditor core invariants', () => {
     expect(pointAt(cut, 0.16)).toEqual(retained);
   });
 
+  it('moves a parting without moving roots or erasing a comb direction', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.combBy('C', [0.12, 0, 0]);
+    const before = editor.exportState();
+    const cDirection = before.strands.find((strand) => strand.id === 'C')!.direction;
+    expect(editor.setParting(0).changed).toBe(true);
+    const after = editor.exportState();
+    expect(after.strands.map((strand) => strand.root)).toEqual(before.strands.map((strand) => strand.root));
+    expect(after.strands.find((strand) => strand.id === 'C')!.direction).toEqual(cDirection);
+    expect(after.strands.some((strand) => strand.partingOffset?.[0] !== 0)).toBe(true);
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;

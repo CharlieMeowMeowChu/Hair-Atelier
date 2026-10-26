@@ -13,6 +13,7 @@ export interface GuideStrand {
   readonly id: string;
   readonly root: Vec3;
   readonly direction: Vec3;
+  readonly partingOffset?: Vec3;
   readonly length: number;
   readonly maximumLength: number;
   readonly curls: readonly CurlSegment[];
@@ -62,6 +63,7 @@ export function parseHairState(serialized: string): HairState | undefined {
       const candidate = strand as Partial<GuideStrand>;
       const vectorIsValid = (vector: unknown): vector is Vec3 => Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
       return typeof candidate.id === 'string' && candidate.id.length > 0 && vectorIsValid(candidate.root) && vectorIsValid(candidate.direction) &&
+        (candidate.partingOffset === undefined || vectorIsValid(candidate.partingOffset)) &&
         Number.isFinite(candidate.length) && Number.isFinite(candidate.maximumLength) && candidate.length! >= 0 && candidate.maximumLength! >= candidate.length! &&
         Array.isArray(candidate.curls) && candidate.curls.every((curl) => curl && Number.isFinite(curl.startS) && Number.isFinite(curl.endS) &&
           Number.isFinite(curl.radius) && Number.isFinite(curl.pitch) && Number.isFinite(curl.phase) && curl.startS >= 0 && curl.endS > curl.startS &&
@@ -75,10 +77,11 @@ export function parseHairState(serialized: string): HairState | undefined {
 
 export function pointAt(strand: GuideStrand, s: number): Vec3 {
   const clampedS = Math.max(0, Math.min(s, strand.length));
+  const partingOffset = strand.partingOffset ?? [0, 0, 0] as Vec3;
   const base: [number, number, number] = [
-    strand.root[0] + strand.direction[0] * clampedS,
-    strand.root[1] + strand.direction[1] * clampedS,
-    strand.root[2] + strand.direction[2] * clampedS,
+    strand.root[0] + (strand.direction[0] + partingOffset[0]) * clampedS,
+    strand.root[1] + (strand.direction[1] + partingOffset[1]) * clampedS,
+    strand.root[2] + (strand.direction[2] + partingOffset[2]) * clampedS,
   ];
   for (const curl of strand.curls) {
     const curlS = Math.max(curl.startS, Math.min(clampedS, curl.endS));
@@ -162,6 +165,23 @@ export class HairEditor {
     this.saveUndo();
     this.state = replaceStrand(this.state, { ...strand, direction });
     return { changed: true, strandId, oldLength: strand.length, newLength: strand.length };
+  }
+
+  public setParting(partingX: number, strength = 0.22): EditResult {
+    if (!Number.isFinite(partingX) || !Number.isFinite(strength) || strength < 0) {
+      return { changed: false, reason: 'Invalid parting', strandId: 'parting' };
+    }
+    const strands = this.state.strands.map((strand) => {
+      const side = strand.root[0] < partingX ? -1 : 1;
+      const proximity = Math.max(0.25, 1 - Math.min(1, Math.abs(strand.root[0] - partingX) / 0.2));
+      return { ...strand, partingOffset: [side * strength * proximity, 0, 0] as Vec3 };
+    });
+    if (canonicalState({ ...this.state, strands }) === canonicalState(this.state)) {
+      return { changed: false, reason: 'No parting displacement', strandId: 'parting' };
+    }
+    this.saveUndo();
+    this.state = { ...this.state, strands };
+    return { changed: true, strandId: 'parting' };
   }
 
   public curlRange(strandId: string, curl: CurlSegment): EditResult {

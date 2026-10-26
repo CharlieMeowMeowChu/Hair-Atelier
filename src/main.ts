@@ -57,7 +57,7 @@ const hair = new THREE.Group();
 scene.add(hair);
 const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
 const hairLines = new Map<string, { line: THREE.Line; signature: string }>();
-type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'grow';
+type Tool = 'rotate' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'grow';
 type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
 let selectedId: string | undefined;
@@ -135,7 +135,7 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '旋轉檢視', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', grow: '增髮：點按髮束' })[value];
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
@@ -242,6 +242,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
     return;
   }
   if (tool === 'comb') { showCursor(hitHair(event.clientX, event.clientY)); return; }
+  if (tool === 'part') { return; }
   if (tool === 'curl') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   const nextPinchDistance = pinchDistance();
@@ -303,6 +304,14 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     if (result.changed) persistState();
     redraw();
     appStatus.textContent = result.changed ? `已向指定方向撥動 ${gesture.hit.id}` : '梳子未產生有效位移';
+  }
+  if (tool === 'part' && gesture.combStart) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const partingX = THREE.MathUtils.clamp(((event.clientX - rect.left) / rect.width - 0.5) * 0.3, -0.15, 0.15);
+    const result = editor.setParting(partingX);
+    if (result.changed) persistState();
+    redraw();
+    appStatus.textContent = result.changed ? `已移動分界至 ${Math.round(partingX * 100)} cm` : '分界位置未改變';
   }
 }
 renderer.domElement.addEventListener('pointerup', (event) => finishGesture(event));
