@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#17141f" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>Hair Atelier — Core Spike</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">HAIR ATELIER · 技術樣板</p>
+        <h1>捲曲、剪短、再增長</h1>
+        <p id="status" aria-live="polite">載入 3D 髮束中…</p>
+      </header>
+      <section id="stage" aria-label="可旋轉的三維髮束樣板"></section>
+      <nav class="controls" aria-label="核心髮束操作">
+        <button id="curl">捲 C</button>
+        <button id="cut">剪 C 到一半</button>
+        <button id="grow">C 增長</button>
+        <button id="undo" class="secondary">Undo</button>
+      </nav>
+      <p class="hint">單指拖動畫面旋轉頭部；此樣板只驗證資料操作，未代表完整髮型或觸控剪刀。</p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

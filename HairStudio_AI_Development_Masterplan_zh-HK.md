@@ -1,6 +1,6 @@
 # Realistic Hair Studio — AI 開發總規格書與逐步執行計劃
 
-**文件版本：** 1.1（加入髮型系統設計、工具互動規則與細分工作包）　｜　**制定日期：** 2026-10-26　｜　**用途：** 可直接交予 AI Coding Agent／開發人員執行
+**文件版本：** 1.2（技術平台遷移至 TypeScript＋Three.js；保留全部核心玩法及驗收）　｜　**制定日期：** 2026-10-26　｜　**用途：** 可直接交予 AI Coding Agent／開發人員執行
 
 > **執行原則：本文件係需求與驗收契約，不代表任何功能已經建成。** AI 必須先證明核心演算法可行，再建立完整遊戲。未經專案擁有人確認，不得改變玩法、換引擎、下載不明代碼、對外公開真人照片、發佈遊戲或花錢購買資產。
 
@@ -18,6 +18,28 @@
 6. **所有第三方內容先審查授權。** GitHub 有公開代碼唔代表可以複製；必須檢查授權全文、相容性、維護狀況、安全性、來源、是否包含未授權模型及素材。
 7. **不得擅自擴大外部操作。** 未經確認不可建立收費帳戶、推送私人照片到公開 GitHub、調用付費 API、部署公開網站、送審 App Store／Google Play 或簽署任何條款。
 8. **失敗時停止並呈報。** 若髮絲演算法無法達標，唔准偷偷轉成「替換成另一個髮型」；先說明卡關、可選方案、成本及對使用者體驗的影響。
+
+### 0.1 2026-10-26 正式技術遷移決策（優先於本文任何相衝突的舊技術字眼）
+
+本專案**不再使用 Unity、URP、C#、Unity packages、Unity Editor build 或 Xcode 作為日常開發與驗證路徑**。原因是擁有人不接受其環境效能負擔與額外建置成本。本文所有核心玩法、資料不變條件、F01–F18、HAIR-001–034、Gate 0–10 及附錄 B 的語義**一律保留**；本節只取代技術實現、測試及交付媒介。
+
+| 層面 | 現行決定 |
+|---|---|
+| 執行媒介 | 直向、觸控優先的 Web App／PWA；先以 iPhone 16 Pro Max、iPad A16 的 Safari 驗證 |
+| 程式 | TypeScript；核心 HairState 不依賴 DOM 或 Three.js，方便 deterministic test |
+| 3D 呈現 | Three.js；WebGL／GPU／記憶體限制必須在指定 Safari 實測 |
+| 輸入 | Pointer Events，優先 touch，兼容 mouse／pen；UI 與畫布手勢必須有所有權及取消規則 |
+| 專案工具 | Vite 作本機開發／production build；npm lockfile 鎖定依賴；不需要原生 Editor |
+| 測試 | Vitest 做核心單元測試；browser smoke 與真機 Safari 手動量測及錄影 |
+| PWA | manifest、service worker、離線 app shell；存檔第一版使用本機 IndexedDB，無雲端帳戶 |
+| 模型資產 | 可用 Blender／合規 DCC 作離線創作；輸出 glTF／GLB，由 Three.js loader 使用；DCC 不屬玩家 runtime |
+| 發佈 | 先本機／私有預覽；公開部署、App Store wrapper、TestFlight、付費服務仍要主人另行批准 |
+
+**Web 平台邊界：** 不得因使用 browser 而將 3D 頭髮降格成 2D 髮型貼圖、按鈕換髮型或錄影假象。iOS Safari 的 WebGL／GPU／記憶體限制屬 Gate 2 以後的實測風險；不得以桌面結果宣稱 iPhone／iPad 通過。
+
+**Phase 1 現行交付：** 可從乾淨 clone 執行 `npm ci` 與 `npm run build` 的 Vite＋Three.js Web App；直向 canvas、touch/mouse 旋轉、測試球體與四條彩色髮束；本機 browser smoke 無 console error。**Gate 1：** production build 與本機瀏覽器 smoke 均成功。
+
+**Phase 2 現行交付：** 對 4–20 條 GuideStrand 建立純 TypeScript `HairState`、弧長採樣、Cut／Curl／Grow／Undo／Redo、Three.js ribbon 或 line renderer 及技術 overlay。Gate 2 的 0.5 mm 保捲誤差、局部修改、增長連續、可重現存讀及指定 Safari 實測要求維持不變。不可因 renderer 或 PWA cache 重建而改寫永久資料。
 
 ## 1. 產品定位：要建立乜遊戲
 
@@ -64,19 +86,19 @@
 
 | 層面 | 選擇 | 原因與保留條件 |
 |---|---|---|
-| 遊戲引擎 | **Unity 6.3 LTS，鎖定實際 patch 版本** | 同一 C# 邏輯面向 iOS／iPadOS、Android、Windows、macOS；開發前須核實硬件與版本相容 |
-| 畫面 | **Universal Render Pipeline（URP）** | 手機優先；HDRP 不宜作為本專案行動平台基礎 |
-| 程式語言 | C# | 編輯邏輯、資料、輸入、測試；與 Unity 引擎整合 |
-| 頭模及髮型製作 | Blender（DCC 工具） | 建立／清理頭模、頭皮、骨架、耳朵、分界參考、導引髮束及開發用測試造型 |
+| 執行平台 | **Web App／PWA，先支援 iPhone 16 Pro Max 與 iPad A16 Safari** | 免原生 Editor／包裝工具的日常負擔；每個 Safari 行為與效能仍須實測 |
+| 3D 畫面 | **Three.js＋WebGL** | 手機 browser 優先；需有 WebGL 可用性、context loss、GPU／記憶體的降級策略 |
+| 程式語言 | TypeScript | 純資料核心、輸入、測試與畫面層可明確分離 |
+| 頭模及髮型製作 | Blender 或合規 DCC；輸出 glTF／GLB | DCC 只作離線素材工具；runtime 由 Three.js loader 使用資產 |
 | 可編輯頭髮核心 | **自家設計的導引髮束＋程序化插值／渲染** | 可以逐束剪／長／捲／紮；不以一般靜態 Hair Cards 作為唯一真實資料 |
-| 行動控制 | Unity Input System | 觸控、滑鼠、筆輸入共用映射，但要分清 UI 與頭髮操作 |
-| 自動化測試 | Unity Test Framework | EditMode、PlayMode；平台 Build smoke test |
-| 原始碼管理 | 私人 GitHub 倉庫、Git LFS、PR | 保存版本、測試紀錄、資產追蹤；角色照片不可放入公開 repo |
+| 行動控制 | Pointer Events + CSS touch-action | 觸控、滑鼠、筆輸入共用映射，但要分清 UI 與頭髮操作 |
+| 自動化測試 | Vitest + browser smoke | 純核心 unit test、production build、browser console／互動 smoke；Safari 真機另報 |
+| 原始碼管理 | Public GitHub 倉庫、Git LFS、PR | 擁有人已選 Public；保存版本、測試紀錄、資產追蹤；角色照片不可放入 repo |
 | 離線執行 | 第一版不依賴網絡或 OpenAI API | 避免成本、個人照片上傳、延遲；AI 服務可作未來選配而非核心玩法 |
 
 **為何不先用現成「毛髮外掛」？** 已有系統未必支援任意剪斷、增長、重建及綁紮，而且效能／授權各異。先建立 2–3 週以內的小型技術 Spike（試驗），量度後才決定要引用邊個外掛。時間係規劃目標，唔係保證。
 
-**平台定義：** 目標係分別打包的原生 iOS／iPadOS、Android、Windows、macOS 遊戲；**唔預設瀏覽器網頁版**。若用戶日後要「在 Safari 網頁直接玩」，需另做 Web 相容性、記憶體和效能評估。iOS 發佈鏈須有可用 Mac／Xcode／Apple 簽章環境；AI 不能在欠缺環境下聲稱已完成 iPhone 真機 build。
+**平台定義：** 目標係可在 Safari 直接運行和安裝的 PWA，主要直向支援 iPhone 16 Pro Max 與 iPad A16；桌面 browser 是開發及輔助驗證平台。離線 app shell、Safari 加入主畫面、記憶體、效能與裝置旋轉要逐項測試。公開部署、App Store wrapper 或 TestFlight 另需明確批准；AI 不得在欠缺真機證據時聲稱已完成。
 
 ### 2.2 渲染策略（建議，須量測）
 
@@ -207,15 +229,15 @@ HairStyleState
 
 **交付：** `DECISIONS.md`、`RISKS.md`、`VERSIONS.lock.md`、需求核對清單。**Gate 0：** 擁有人認可產品方向與保留假設。
 
-### Phase 1 — GitHub 倉庫及最小可運行 Unity 專案
+### Phase 1 — GitHub 倉庫及最小可運行 Web App／PWA
 
-1. 在得到建立私人倉庫的授權後建立 `realistic-hair-studio`，預設 **Private**；不要把任何真人照片推到公共倉庫。
-2. 使用 Unity Hub 安裝指定 Unity LTS patch、Android／iOS／Desktop Build Support（依實際 OS 選擇）；建 **3D URP** project。
-3. 開啟 Unity Input System；加入 Unity Test Framework。建立 Git、`.gitignore`（Unity cache／Build）、Git LFS（`.fbx`, `.blend`, 大型 texture 等）。
-4. 建立空白場景 `HairSandbox`：攝影機、燈光、轉台、測試頭（可先球體）及 4 條彩色測試髮束。
-5. 建置桌面版 smoke build，確認拖動可旋轉、可回正面，沒有 Console errors。
+1. 沿用現有 Public repo；不要把任何真人照片推到 repo。每個 Phase 維持 feature branch → test → PR → review → merge。
+2. 以 Node LTS 安裝 lockfile 中的 TypeScript、Vite、Three.js、Vitest；不安裝 Unity 或原生 build 支援。
+3. 建立 `.gitignore`（`node_modules/`、`dist/`、本機機密）及 Git LFS（只限必要、可公開的 `.glb`、texture 等大型資產）。
+4. 建立 `HairSandbox` Web scene：camera、light、orbit／pointer controller、測試球體及 4 條彩色測試髮束。
+5. 執行 `npm run test`、`npm run build` 與本機 browser smoke；確認直向畫面可載入、可拖動旋轉、無 console error。
 
-**交付：** 可打開的 Unity 專案、第一次 build、操作影片、安裝／啟動說明。**Gate 1：** 從乾淨 clone 開啟並打包成功。
+**交付：** 可從 browser 打開的 Web App、第一次 production build、操作錄影、啟動說明。**Gate 1：** 從乾淨 clone `npm ci` 後 build 成功，並完成 browser smoke。
 
 ### Phase 2 — **最高優先：剪髮／捲髮／增長技術 Spike**
 

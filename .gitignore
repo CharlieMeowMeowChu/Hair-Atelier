@@ -21,5 +21,8 @@ PrivateReferences/
 .env.*
 __pycache__/
 *.pyc
+node_modules/
+dist/
+*.tsbuildinfo
 # Generated environment smoke fixtures
 BuildReports/phase0/generated/

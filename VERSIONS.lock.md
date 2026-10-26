@@ -1,5 +1,20 @@
 # 工具版本／驗證狀態
 
+> 2026-10-26：Unity 技術路徑已被 TypeScript＋Three.js Web App／PWA 取代。下列 Unity／Blender 紀錄只保留為已完成的環境歷史，不是當前依賴或 Gate 證據。
+
+## 當前 Web 依賴
+
+| 工具／套件 | 鎖定來源 | 狀態 |
+|---|---|---|
+| Node.js | 本工作環境 v24.19.0 | 實測 `npm run check` |
+| TypeScript | package-lock.json | production typecheck／build PASS |
+| Three.js | package-lock.json | Three.js WebGL 技術樣板已使用 |
+| Vite | package-lock.json | production build PASS |
+| Vitest | package-lock.json | 5 項 HairEditor core test PASS |
+| Safari iPhone 16 Pro Max／iPad A16 | 待真機實測 | 未測，不能由桌面代替 |
+
+## 已淘汰路徑的歷史紀錄
+
 日期：2026-10-26（香港）。本檔鎖定環境選擇，尚不是已可建置遊戲的套件鎖檔。
 
 | 工具 | 精確版本／來源 | 狀態 |

@@ -1,0 +1,9 @@
+{
+  "name": "Hair Atelier Core Spike",
+  "short_name": "Hair Atelier",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#17141f",
+  "theme_color": "#17141f",
+  "lang": "zh-Hant"
+}
