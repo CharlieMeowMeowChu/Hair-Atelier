@@ -184,6 +184,18 @@ describe('HairEditor core invariants', () => {
     expect(editor.exportState().strands.find((strand) => strand.id === 'C')?.braid?.id).toBe('braid-demo');
   });
 
+  it('sweeps all strands to one side while keeping roots and individual comb direction', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.combBy('C', [0.12, 0, 0]);
+    const before = editor.exportState();
+    const results = editor.sweepToSide('left');
+    const after = editor.exportState();
+    expect(results).toHaveLength(4);
+    expect(after.strands.every((strand) => strand.sideSweepOffset?.[0] === -0.38)).toBe(true);
+    expect(after.strands.find((strand) => strand.id === 'C')?.direction).toEqual(before.strands.find((strand) => strand.id === 'C')?.direction);
+    expect(after.strands.map((strand) => pointAt(strand, 0))).toEqual(before.strands.map((strand) => strand.root));
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;

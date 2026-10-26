@@ -34,6 +34,7 @@
         <button data-tool="halfup">公主頭</button>
         <button data-tool="pair">兩束綁</button>
         <button data-tool="braid">三股辮</button>
+        <button data-tool="sweep">側撥</button>
         <button data-tool="grow">增髮</button>
       </nav>
       <label class="clipper-setting" for="clipper-length">電剪留髮 <output id="clipper-length-value">6 cm</output>
@@ -45,6 +46,12 @@
           <option value="high">高位</option>
         </select>
       </label>
+      <label class="tie-setting" for="sweep-side">側撥方向
+        <select id="sweep-side">
+          <option value="left">左側</option>
+          <option value="right">右側</option>
+        </select>
+      </label>
       <nav class="controls" aria-label="歷史操作">
         <button id="undo" class="secondary">Undo</button>
         <button id="redo" class="secondary">Redo</button>
@@ -52,7 +59,7 @@
         <button id="load" class="secondary">讀取</button>
         <button id="reset" class="secondary">重設樣板</button>
       </nav>
-      <p class="hint">旋轉：單指拖動，兩指縮放。剪刀／電剪：沿髮束拖動後放手。捲髮器／梳子：按住髮束拖動。分界：在頭皮區域水平拖動。夾耳後：點按髮束。馬尾／公主頭／兩束綁／三股辮：點按任一髮束。增髮：點按一束髮絲。</p>
+      <p class="hint">旋轉：單指拖動，兩指縮放。剪刀／電剪：沿髮束拖動後放手。捲髮器／梳子：按住髮束拖動。分界：在頭皮區域水平拖動。夾耳後：點按髮束。馬尾／公主頭／兩束綁／三股辮／側撥：點按任一髮束。增髮：點按一束髮絲。</p>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

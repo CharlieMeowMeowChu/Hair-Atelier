@@ -14,6 +14,7 @@ export interface GuideStrand {
   readonly root: Vec3;
   readonly direction: Vec3;
   readonly partingOffset?: Vec3;
+  readonly sideSweepOffset?: Vec3;
   readonly earTuck?: 'left' | 'right';
   readonly tie?: HairTie;
   readonly braid?: BraidConstraint;
@@ -88,6 +89,7 @@ export function parseHairState(serialized: string): HairState | undefined {
       const vectorIsValid = (vector: unknown): vector is Vec3 => Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
       return typeof candidate.id === 'string' && candidate.id.length > 0 && vectorIsValid(candidate.root) && vectorIsValid(candidate.direction) &&
         (candidate.partingOffset === undefined || vectorIsValid(candidate.partingOffset)) &&
+        (candidate.sideSweepOffset === undefined || vectorIsValid(candidate.sideSweepOffset)) &&
         (candidate.earTuck === undefined || candidate.earTuck === 'left' || candidate.earTuck === 'right') &&
         (candidate.tie === undefined || typeof candidate.tie.id === 'string' && vectorIsValid(candidate.tie.anchor) && Number.isFinite(candidate.tie.gatherS) && candidate.tie.gatherS > 0) &&
         (candidate.braid === undefined || typeof candidate.braid.id === 'string' && [0, 1, 2].includes(candidate.braid.index) && vectorIsValid(candidate.braid.axisOrigin) &&
@@ -107,10 +109,11 @@ export function parseHairState(serialized: string): HairState | undefined {
 function pointWithoutTie(strand: GuideStrand, s: number): Vec3 {
   const clampedS = Math.max(0, Math.min(s, strand.length));
   const partingOffset = strand.partingOffset ?? [0, 0, 0] as Vec3;
+  const sideSweepOffset = strand.sideSweepOffset ?? [0, 0, 0] as Vec3;
   const base: [number, number, number] = [
-    strand.root[0] + (strand.direction[0] + partingOffset[0]) * clampedS,
-    strand.root[1] + (strand.direction[1] + partingOffset[1]) * clampedS,
-    strand.root[2] + (strand.direction[2] + partingOffset[2]) * clampedS,
+    strand.root[0] + (strand.direction[0] + partingOffset[0] + sideSweepOffset[0]) * clampedS,
+    strand.root[1] + (strand.direction[1] + partingOffset[1] + sideSweepOffset[1]) * clampedS,
+    strand.root[2] + (strand.direction[2] + partingOffset[2] + sideSweepOffset[2]) * clampedS,
   ];
   for (const curl of strand.curls) {
     const curlS = Math.max(curl.startS, Math.min(clampedS, curl.endS));
@@ -257,6 +260,16 @@ export class HairEditor {
     this.saveUndo();
     this.state = { ...this.state, strands };
     return { changed: true, strandId: 'parting' };
+  }
+
+  public sweepToSide(side: 'left' | 'right'): readonly EditResult[] {
+    if (side !== 'left' && side !== 'right') return [];
+    const offset: Vec3 = [side === 'left' ? -0.38 : 0.38, 0, 0];
+    const affected = this.state.strands.filter((strand) => strand.sideSweepOffset?.[0] !== offset[0]);
+    if (affected.length === 0) return [];
+    this.saveUndo();
+    this.state = { ...this.state, strands: this.state.strands.map((strand) => ({ ...strand, sideSweepOffset: offset })) };
+    return affected.map((strand) => ({ changed: true, strandId: strand.id, oldLength: strand.length, newLength: strand.length }));
   }
 
   public tuckBehindEar(strandId: string, side: 'left' | 'right'): EditResult {

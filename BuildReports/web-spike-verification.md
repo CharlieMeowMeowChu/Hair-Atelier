@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| CoreHair 單元測試 | PASS | Vitest：1 test file、23 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、分界不清除梳髮方向、左右夾耳狀態與 Undo、高低馬尾錨點與捲尾相對幾何、公主頭下半部保持自由、兩束共享 anchor 而保留 group ID、三股辮的相位分離與剪後資料保留、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向及保存資料驗證 |
+| CoreHair 單元測試 | PASS | Vitest：1 test file、24 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、分界不清除梳髮方向、左右夾耳狀態與 Undo、高低馬尾錨點與捲尾相對幾何、公主頭下半部保持自由、兩束共享 anchor 而保留 group ID、三股辮的相位分離與剪後資料保留、側撥保留梳髮方向、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向及保存資料驗證 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
@@ -21,6 +21,7 @@
 | 公主頭原型 | IMPLEMENTED | 點按後只把示範上半部 B、C 導引束綁到獨立後方錨點，A、D 保持自由；多個髮圈錨點可同時顯示，尚未有玩家圈選髮束 UI |
 | 兩束綁原型 | IMPLEMENTED | A/B 與 C/D 兩組以不同 group ID 約束到同一 anchor；一次操作可 Undo，兩組身份保留；尚未有玩家圈選任意髮束組的 UI |
 | 三股辮原型 | IMPLEMENTED | B/C/D 導引束用 index 0–2 的相位分離程序化 3D 路徑交織；髮根固定，剪後 braid constraint 保留；尚未有任意三束選取、逐段編織手勢或辮尾固定 UI |
+| 側撥原型 | IMPLEMENTED | 可選左／右側，把所有示範導引束加上可保存的側向偏移；髮根固定，原有 comb direction 不被清除；尚未有肩膀／耳朵碰撞及區域刷選 |
 | 剪刀預覽及遮擋 | IMPLEMENTED | Three.js Raycaster 對髮束線段拾取；若頭部交點較近便排除後方髮束；命中束轉白並顯示切口環形預覽 |
 | 剪刀游標 | IMPLEMENTED | 命中髮束時顯示相機朝向的雙刃剪刀游標；未命中或離開畫面時隱藏 |
 | 快速拖掃 | IMPLEMENTED | 兩個 PointerEvent 之間每 8 px 補取樣；一次手勢可剪多束，並合併成單一 Undo 指令 |
@@ -33,6 +34,7 @@
 ## 尚未通過／未聲稱完成
 
 - Safari／iPhone 16 Pro Max／iPad A16 尚未真機打開；FPS、記憶體、離線與背景恢復均為 NOT_TESTED。
+- Production build 的 Three.js 主 bundle 為約 500 KB（gzip 約 128 KB），Vite 發出 chunk-size 警告；尚未做模組拆分與 iPhone/iPad 載入／記憶體量測。
 - 此原型已有命中高亮、頭部遮擋 raycast 與拖掃補取樣，但尚未提供剪刀模型、密集髮束空間索引、髮束互相遮擋或 ribbon mesh 的局部重建。這些仍須在後續 Gate 3 驗收。
 - 這是 4 條彩色 GuideStrand 與球體，不是全頭髮、真人模型、物理碰撞、馬尾或辮子。
 - 未建立公開部署或 URL。PWA source 可 production build，但未公開或安裝到裝置。
