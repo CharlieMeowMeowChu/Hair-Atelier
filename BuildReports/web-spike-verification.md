@@ -15,6 +15,7 @@
 | 剪刀預覽及遮擋 | IMPLEMENTED | Three.js Raycaster 對髮束線段拾取；若頭部交點較近便排除後方髮束；命中束轉白並顯示切口環形預覽 |
 | 快速拖掃 | IMPLEMENTED | 兩個 PointerEvent 之間每 8 px 補取樣；一次手勢可剪多束，並合併成單一 Undo 指令 |
 | 靜止耗電控制 | IMPLEMENTED | 取消永久 animation loop；旋轉、選取、資料更新或 resize 時才要求下一幀渲染 |
+| 技術 overlay | IMPLEMENTED | 即時顯示 selected strand ID、實際弧長、curl radius/pitch、cut preview 弧長及 geometry rebuild 毫秒數 |
 | PWA 基礎 | IMPLEMENTED | manifest、service worker runtime cache；未做離線真機驗證 |
 
 ## 尚未通過／未聲稱完成

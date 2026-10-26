@@ -6,6 +6,13 @@ const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
 if (!stage || !status) throw new Error('Required UI is missing');
 const appStatus: HTMLElement = status;
+const metrics = {
+  selected: document.querySelector<HTMLElement>('#metric-selected'),
+  length: document.querySelector<HTMLElement>('#metric-length'),
+  curl: document.querySelector<HTMLElement>('#metric-curl'),
+  cut: document.querySelector<HTMLElement>('#metric-cut'),
+  mesh: document.querySelector<HTMLElement>('#metric-mesh'),
+};
 
 let editor = new HairEditor(createDemoHairState());
 const scene = new THREE.Scene();
@@ -40,6 +47,9 @@ const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff
 type Tool = 'rotate' | 'cut' | 'curl' | 'grow';
 type HairHit = { id: string; s: number; point: THREE.Vector3 };
 let tool: Tool = 'rotate';
+let selectedId: string | undefined;
+let previewCutS: number | undefined;
+let meshUpdateMilliseconds = 0;
 const raycaster = new THREE.Raycaster();
 raycaster.params.Line = { threshold: 0.014 };
 const cursor = new THREE.Mesh(
@@ -50,6 +60,7 @@ cursor.visible = false;
 scene.add(cursor);
 
 function redraw(): void {
+  const startedAt = performance.now();
   hair.clear();
   for (const strand of editor.exportState().strands) {
     const sampled = sampleStrand(strand);
@@ -61,8 +72,20 @@ function redraw(): void {
     hair.add(line);
   }
   const c = editor.exportState().strands.find((strand) => strand.id === 'C');
+  meshUpdateMilliseconds = performance.now() - startedAt;
   appStatus.textContent = c ? `${toolLabel(tool)} ｜ C：${Math.round(c.length * 100)} cm ｜ Undo ${editor.canUndo ? '可用' : '未有操作'}` : '髮束資料錯誤';
+  updateOverlay();
   requestRender();
+}
+
+function updateOverlay(): void {
+  const strand = editor.exportState().strands.find((item) => item.id === selectedId);
+  const curl = strand?.curls[0];
+  if (metrics.selected) metrics.selected.textContent = strand?.id ?? '—';
+  if (metrics.length) metrics.length.textContent = strand ? `${(strand.length * 100).toFixed(1)} cm` : '—';
+  if (metrics.curl) metrics.curl.textContent = curl ? `${(curl.radius * 100).toFixed(1)} / ${(curl.pitch * 100).toFixed(1)} cm` : '—';
+  if (metrics.cut) metrics.cut.textContent = previewCutS === undefined ? '—' : `${(previewCutS * 100).toFixed(1)} cm`;
+  if (metrics.mesh) metrics.mesh.textContent = `${meshUpdateMilliseconds.toFixed(2)} ms`;
 }
 
 function toolLabel(value: Tool): string {
@@ -108,6 +131,9 @@ function highlightHair(strandId?: string): void {
 }
 
 function showCursor(hit: HairHit | undefined): void {
+  selectedId = hit?.id;
+  previewCutS = tool === 'cut' ? hit?.s : undefined;
+  updateOverlay();
   if (!hit) { cursor.visible = false; highlightHair(); return; }
   cursor.position.copy(hit.point);
   cursor.quaternion.copy(camera.quaternion);
@@ -138,7 +164,12 @@ renderer.domElement.addEventListener('pointermove', (event) => {
     for (const hit of hits) pointer.cuts.set(hit.id, Math.min(pointer.cuts.get(hit.id) ?? hit.s, hit.s));
     pointer.x = event.clientX;
     pointer.y = event.clientY;
-    showCursor(hits.at(-1));
+    const latest = hits.at(-1);
+    showCursor(latest);
+    if (latest) {
+      previewCutS = pointer.cuts.get(latest.id);
+      updateOverlay();
+    }
     return;
   }
   if (tool === 'curl') { showCursor(hitHair(event.clientX, event.clientY)); return; }
@@ -156,6 +187,8 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
   const gesture = pointer;
   pointer = undefined;
   cursor.visible = false;
+  previewCutS = undefined;
+  updateOverlay();
   highlightHair();
   if (cancelled) return;
   if (tool === 'cut' && gesture.cuts.size > 0) {
