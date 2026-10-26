@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| CoreHair 單元測試 | PASS | Vitest：1 test file、21 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、分界不清除梳髮方向、左右夾耳狀態與 Undo、高低馬尾錨點與捲尾相對幾何、公主頭下半部保持自由、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向及保存資料驗證 |
+| CoreHair 單元測試 | PASS | Vitest：1 test file、22 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、分界不清除梳髮方向、左右夾耳狀態與 Undo、高低馬尾錨點與捲尾相對幾何、公主頭下半部保持自由、兩束共享 anchor 而保留 group ID、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向及保存資料驗證 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
@@ -19,6 +19,7 @@
 | 夾耳後原型 | IMPLEMENTED | 點按髮束按其髮根左右側導向對應耳後，左右狀態可獨立保存及 Undo；場景有基本耳朵幾何作定位，尚未做逐束耳朵碰撞或完整耳後軌跡約束 |
 | 馬尾原型 | IMPLEMENTED | 可選高／低位；點按任一髮束，把符合長度的導引束以同一後方錨點匯合；髮根固定、錨點後尾段保留自身長度及捲曲相對幾何，非預製髮型切換；目前只有高低馬尾及基本髮圈標記 |
 | 公主頭原型 | IMPLEMENTED | 點按後只把示範上半部 B、C 導引束綁到獨立後方錨點，A、D 保持自由；多個髮圈錨點可同時顯示，尚未有玩家圈選髮束 UI |
+| 兩束綁原型 | IMPLEMENTED | A/B 與 C/D 兩組以不同 group ID 約束到同一 anchor；一次操作可 Undo，兩組身份保留；尚未有玩家圈選任意髮束組的 UI |
 | 剪刀預覽及遮擋 | IMPLEMENTED | Three.js Raycaster 對髮束線段拾取；若頭部交點較近便排除後方髮束；命中束轉白並顯示切口環形預覽 |
 | 剪刀游標 | IMPLEMENTED | 命中髮束時顯示相機朝向的雙刃剪刀游標；未命中或離開畫面時隱藏 |
 | 快速拖掃 | IMPLEMENTED | 兩個 PointerEvent 之間每 8 px 補取樣；一次手勢可剪多束，並合併成單一 Undo 指令 |

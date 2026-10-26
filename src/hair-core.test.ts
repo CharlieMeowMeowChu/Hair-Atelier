@@ -153,6 +153,21 @@ describe('HairEditor core invariants', () => {
     expect(state.strands.find((strand) => strand.id === 'B')?.tie?.id).toBe('half-up');
   });
 
+  it('ties two distinguishable groups to the same anchor in one undo step', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const anchor: [number, number, number] = [0, 0.04, -0.18];
+    const results = editor.tieGroups([
+      { strandIds: ['A', 'B'], tie: { id: 'pair-left', anchor, gatherS: 0.15 } },
+      { strandIds: ['C', 'D'], tie: { id: 'pair-right', anchor, gatherS: 0.15 } },
+    ]);
+    const tied = editor.exportState();
+    expect(results).toHaveLength(4);
+    expect(tied.strands.find((strand) => strand.id === 'A')?.tie?.id).toBe('pair-left');
+    expect(tied.strands.find((strand) => strand.id === 'C')?.tie?.id).toBe('pair-right');
+    editor.undo();
+    expect(editor.exportState().strands.every((strand) => strand.tie === undefined)).toBe(true);
+  });
+
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
     const editor = new HairEditor(createDemoHairState());
     let previousLength = 0.3;

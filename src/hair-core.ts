@@ -27,6 +27,11 @@ export interface HairTie {
   readonly gatherS: number;
 }
 
+export interface TieGroup {
+  readonly strandIds: readonly string[];
+  readonly tie: HairTie;
+}
+
 export interface HairState {
   readonly schemaVersion: 1;
   readonly strands: readonly GuideStrand[];
@@ -226,14 +231,28 @@ export class HairEditor {
   }
 
   public tieStrands(strandIds: readonly string[], tie: HairTie): readonly EditResult[] {
-    if (!tie.id || !tie.anchor.every(Number.isFinite) || !Number.isFinite(tie.gatherS) || tie.gatherS <= 0) return [];
-    const targetIds = new Set(strandIds);
-    const eligible = this.state.strands.filter((strand) => targetIds.has(strand.id) && strand.length > tie.gatherS && strand.tie?.id !== tie.id);
+    return this.tieGroups([{ strandIds, tie }]);
+  }
+
+  public tieGroups(groups: readonly TieGroup[]): readonly EditResult[] {
+    const assignment = new Map<string, HairTie>();
+    for (const group of groups) {
+      const { tie } = group;
+      if (!tie.id || !tie.anchor.every(Number.isFinite) || !Number.isFinite(tie.gatherS) || tie.gatherS <= 0) return [];
+      group.strandIds.forEach((strandId) => assignment.set(strandId, tie));
+    }
+    const eligible = this.state.strands.filter((strand) => {
+      const tie = assignment.get(strand.id);
+      return tie && strand.length > tie.gatherS && strand.tie?.id !== tie.id;
+    });
     if (eligible.length === 0) return [];
     this.saveUndo();
     this.state = {
       ...this.state,
-      strands: this.state.strands.map((strand) => targetIds.has(strand.id) && strand.length > tie.gatherS ? { ...strand, tie } : strand),
+      strands: this.state.strands.map((strand) => {
+        const tie = assignment.get(strand.id);
+        return tie && strand.length > tie.gatherS ? { ...strand, tie } : strand;
+      }),
     };
     return eligible.map((strand) => ({ changed: true, strandId: strand.id, oldLength: strand.length, newLength: strand.length }));
   }
