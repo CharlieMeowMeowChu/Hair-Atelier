@@ -51,6 +51,28 @@ export function canonicalState(state: HairState): string {
   });
 }
 
+export function parseHairState(serialized: string): HairState | undefined {
+  try {
+    const value: unknown = JSON.parse(serialized);
+    if (!value || typeof value !== 'object') return undefined;
+    const state = value as Partial<HairState>;
+    if (state.schemaVersion !== 1 || !Array.isArray(state.strands) || state.strands.length === 0) return undefined;
+    const valid = state.strands.every((strand) => {
+      if (!strand || typeof strand !== 'object') return false;
+      const candidate = strand as Partial<GuideStrand>;
+      const vectorIsValid = (vector: unknown): vector is Vec3 => Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
+      return typeof candidate.id === 'string' && candidate.id.length > 0 && vectorIsValid(candidate.root) && vectorIsValid(candidate.direction) &&
+        Number.isFinite(candidate.length) && Number.isFinite(candidate.maximumLength) && candidate.length! >= 0 && candidate.maximumLength! >= candidate.length! &&
+        Array.isArray(candidate.curls) && candidate.curls.every((curl) => curl && Number.isFinite(curl.startS) && Number.isFinite(curl.endS) &&
+          Number.isFinite(curl.radius) && Number.isFinite(curl.pitch) && Number.isFinite(curl.phase) && curl.startS >= 0 && curl.endS > curl.startS &&
+          curl.radius > 0 && curl.pitch > 0 && (curl.direction === -1 || curl.direction === 1));
+    });
+    return valid ? copyState(state as HairState) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function pointAt(strand: GuideStrand, s: number): Vec3 {
   const clampedS = Math.max(0, Math.min(s, strand.length));
   const base: [number, number, number] = [

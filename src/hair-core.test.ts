@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalState, createDemoHairState, HairEditor, pointAt } from './hair-core';
+import { canonicalState, createDemoHairState, HairEditor, parseHairState, pointAt } from './hair-core';
 
 describe('HairEditor core invariants', () => {
   it('cuts only the selected strand', () => {
@@ -155,5 +155,15 @@ describe('HairEditor core invariants', () => {
     const atFormerTip = pointAt(grown, 0.4);
     expect(Math.hypot(justAfterFormerTip[0] - atFormerTip[0], justAfterFormerTip[2] - atFormerTip[2])).toBeGreaterThan(0);
     expect(oldCurlSample).toEqual(pointAt(grown, 0.16));
+  });
+
+  it('round-trips valid saved state and rejects malformed persistence data', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.curlRange('C', { startS: 0.04, endS: 0.3, radius: 0.025, pitch: 0.08, phase: 0, direction: -1 });
+    editor.cutAt('C', 0.2);
+    const saved = canonicalState(editor.exportState());
+    expect(canonicalState(parseHairState(saved)!)).toBe(saved);
+    expect(parseHairState('{')).toBeUndefined();
+    expect(parseHairState(JSON.stringify({ schemaVersion: 1, strands: [{ id: 'bad' }] }))).toBeUndefined();
   });
 });

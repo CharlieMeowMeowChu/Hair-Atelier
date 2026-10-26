@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
-import { createDemoHairState, HairEditor, sampleStrand } from './hair-core';
+import { canonicalState, createDemoHairState, HairEditor, parseHairState, sampleStrand } from './hair-core';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -14,7 +14,19 @@ const metrics = {
   mesh: document.querySelector<HTMLElement>('#metric-mesh'),
 };
 
-let editor = new HairEditor(createDemoHairState());
+const storageKey = 'hair-atelier.hair-state.v1';
+function loadPersistedState() {
+  try { return parseHairState(localStorage.getItem(storageKey) ?? ''); } catch { return undefined; }
+}
+function persistState(): boolean {
+  try {
+    localStorage.setItem(storageKey, canonicalState(editor.exportState()));
+    return true;
+  } catch {
+    return false;
+  }
+}
+let editor = new HairEditor(loadPersistedState() ?? createDemoHairState());
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#211c29');
 const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 10);
@@ -198,6 +210,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   lastPinchDistance = pinchDistance();
   if (tool === 'grow' && hit) {
     editor.growBy(hit.id, 0.05);
+    persistState();
     redraw();
     appStatus.textContent = `已對 ${hit.id} 增長 5 cm`;
   } else if (tool !== 'rotate') showCursor(hit);
@@ -249,6 +262,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
   if (cancelled) return;
   if (tool === 'cut' && gesture.cuts.size > 0) {
     const results = editor.cutManyAt([...gesture.cuts].map(([strandId, arcLengthMeters]) => ({ strandId, arcLengthMeters })));
+    if (results.length > 0) persistState();
     redraw();
     appStatus.textContent = results.length > 0 ? `一次剪短 ${results.map((result) => result.strandId).join('、')} 共 ${results.length} 束` : '剪刀未切到可移除的髮尾';
   }
@@ -258,6 +272,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     const direction = event.clientX - (gesture.curlStartX ?? event.clientX) >= 0 ? 1 : -1;
     const startS = Math.max(0.01, gesture.hit.s - 0.04);
     const result = editor.curlRange(strand.id, { startS, endS: strand.length, radius: 0.025, pitch: 0.08, phase: 0.3, direction });
+    if (result.changed) persistState();
     redraw();
     appStatus.textContent = result.changed ? `已捲曲 ${strand.id} 的 ${Math.round(startS * 100)} cm 至髮尾` : '未能建立捲曲';
   }
@@ -276,10 +291,21 @@ document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => 
 });
 document.querySelector<HTMLButtonElement>('#undo')?.addEventListener('click', () => {
   editor.undo();
+  persistState();
   redraw();
 });
-document.querySelector<HTMLButtonElement>('#redo')?.addEventListener('click', () => { editor.redo(); redraw(); });
-document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => { editor = new HairEditor(createDemoHairState()); redraw(); });
+document.querySelector<HTMLButtonElement>('#redo')?.addEventListener('click', () => { editor.redo(); persistState(); redraw(); });
+document.querySelector<HTMLButtonElement>('#save')?.addEventListener('click', () => {
+  appStatus.textContent = persistState() ? '已儲存到本機瀏覽器' : '瀏覽器拒絕本機儲存';
+});
+document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', () => {
+  const restored = loadPersistedState();
+  if (!restored) { appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
+  editor = new HairEditor(restored);
+  appStatus.textContent = '已讀取本機儲存';
+  redraw();
+});
+document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => { editor = new HairEditor(createDemoHairState()); persistState(); redraw(); });
 
 new ResizeObserver(() => {
   const { clientWidth, clientHeight } = stage;
