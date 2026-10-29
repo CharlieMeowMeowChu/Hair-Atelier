@@ -28,7 +28,7 @@
 | 三股辮原型 | IMPLEMENTED | B/C/D 導引束用 index 0–2 的相位分離程序化 3D 路徑交織；髮根固定，剪後 braid constraint 保留；尚未有任意三束選取、逐段編織手勢或辮尾固定 UI |
 | 側撥原型 | IMPLEMENTED | 可選左／右側，把所有示範導引束加上可保存的側向偏移；髮根固定，原有 comb direction 不被清除；尚未有肩膀／耳朵碰撞及區域刷選 |
 | 髮束選取 | IMPLEMENTED | 選取工具可點按切換髮束群組；馬尾、公主頭會套用選取組別；兩束或以上可建立按髮根位置分組的兩束綁；選中剛好三束時三股辮使用該組別，否則使用示範 B/C/D；重設或「取消選取」會清空選取 |
-| 剪刀預覽及遮擋 | IMPLEMENTED | Three.js Raycaster 對髮束線段拾取；若頭部交點較近便排除後方髮束；命中束轉白並顯示切口環形預覽 |
+| 剪刀預覽及遮擋 | IMPLEMENTED | Three.js Raycaster 對髮束線段拾取；命中半徑按 pinch 後鏡頭距離調整；若頭部交點較近便排除後方髮束；命中束轉白並顯示切口環形預覽；尚未做真機觸控容差驗證 |
 | 剪刀游標 | IMPLEMENTED | 命中髮束時顯示相機朝向的雙刃剪刀游標；未命中或離開畫面時隱藏 |
 | 快速拖掃 | IMPLEMENTED | 兩個 PointerEvent 之間每 8 px 補取樣；一次手勢可剪多束，並合併成單一 Undo 指令 |
 | 靜止耗電控制 | IMPLEMENTED | 取消永久 animation loop；旋轉、選取、資料更新或 resize 時才要求下一幀渲染 |

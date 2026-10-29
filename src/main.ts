@@ -180,6 +180,8 @@ function toolLabel(value: Tool): string {
 }
 
 function hitHair(clientX: number, clientY: number): HairHit | undefined {
+  // Keep a roughly stable screen-space hit target when pinch zoom changes distance.
+  raycaster.params.Line.threshold = MathUtils.clamp(0.014 * camera.position.z / 1.35, 0.01, 0.025);
   const rect = renderer.domElement.getBoundingClientRect();
   const x = ((clientX - rect.left) / rect.width) * 2 - 1;
   const y = -((clientY - rect.top) / rect.height) * 2 + 1;
