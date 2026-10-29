@@ -361,7 +361,11 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   }
   if (tool === 'comb') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool === 'part') { return; }
-  if (tool === 'curl') { showCursor(hitHair(event.clientX, event.clientY)); return; }
+  if (tool === 'curl') {
+    if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) >= 6) pointer.hasDragged = true;
+    showCursor(hitHair(event.clientX, event.clientY));
+    return;
+  }
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   const nextPinchDistance = pinchDistance();
   if (nextPinchDistance && lastPinchDistance) {
@@ -401,7 +405,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     redraw();
     appStatus.textContent = results.length > 0 ? `電剪修短 ${results.map((result) => result.strandId).join('、')} 至 ${Math.round(guard * 100)} cm` : '命中髮束已短於設定留髮長度';
   }
-  if (tool === 'curl' && gesture.hit) {
+  if (tool === 'curl' && gesture.hit && gesture.hasDragged) {
     const strand = editor.exportState().strands.find((item) => item.id === gesture.hit?.id);
     if (!strand) return;
     const direction = event.clientX - (gesture.curlStartX ?? event.clientX) >= 0 ? 1 : -1;
