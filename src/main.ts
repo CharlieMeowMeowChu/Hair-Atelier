@@ -360,7 +360,10 @@ renderer.domElement.addEventListener('pointermove', (event) => {
     return;
   }
   if (tool === 'comb') { showCursor(hitHair(event.clientX, event.clientY)); return; }
-  if (tool === 'part') { return; }
+  if (tool === 'part') {
+    if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) >= 6) pointer.hasDragged = true;
+    return;
+  }
   if (tool === 'curl') {
     if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) >= 6) pointer.hasDragged = true;
     showCursor(hitHair(event.clientX, event.clientY));
@@ -425,7 +428,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     redraw();
     appStatus.textContent = result.changed ? `已向指定方向撥動 ${gesture.hit.id}` : '梳子未產生有效位移';
   }
-  if (tool === 'part' && gesture.combStart) {
+  if (tool === 'part' && gesture.combStart && gesture.hasDragged) {
     const rect = renderer.domElement.getBoundingClientRect();
     const partingX = MathUtils.clamp(((event.clientX - rect.left) / rect.width - 0.5) * 0.3, -0.15, 0.15);
     const result = editor.setParting(partingX);
