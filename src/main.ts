@@ -242,7 +242,7 @@ function applyViewRotation(): void {
   headRig.rotation.set(rotationX, rotationY, 0);
   requestRender();
 }
-let pointer: { x: number; y: number; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number; combStart?: { x: number; y: number } } | undefined;
+let pointer: { x: number; y: number; startX: number; startY: number; hasDragged: boolean; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number; combStart?: { x: number; y: number } } | undefined;
 const activePointers = new Map<number, { x: number; y: number }>();
 let lastPinchDistance: number | undefined;
 function pinchDistance(): number | undefined {
@@ -254,7 +254,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   const hit = hitHair(event.clientX, event.clientY);
   const cuts = new Map<string, number>();
   const clippedIds = new Set<string>();
-  pointer = { x: event.clientX, y: event.clientY, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
+  pointer = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, hasDragged: false, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
   renderer.domElement.setPointerCapture(event.pointerId);
   lastPinchDistance = pinchDistance();
   if (tool === 'select' && hit) {
@@ -335,6 +335,8 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   if (activePointers.has(event.pointerId)) activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (!pointer) return;
   if (tool === 'cut') {
+    if (!pointer.hasDragged && Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) < 6) return;
+    pointer.hasDragged = true;
     const hits = sweepHits(pointer.x, pointer.y, event.clientX, event.clientY);
     for (const hit of hits) pointer.cuts.set(hit.id, Math.min(pointer.cuts.get(hit.id) ?? hit.s, hit.s));
     pointer.x = event.clientX;
@@ -348,6 +350,8 @@ renderer.domElement.addEventListener('pointermove', (event) => {
     return;
   }
   if (tool === 'clip') {
+    if (!pointer.hasDragged && Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) < 6) return;
+    pointer.hasDragged = true;
     const hits = sweepHits(pointer.x, pointer.y, event.clientX, event.clientY);
     hits.forEach((hit) => pointer?.clippedIds.add(hit.id));
     pointer.x = event.clientX;
