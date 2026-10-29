@@ -253,9 +253,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   const hit = hitHair(event.clientX, event.clientY);
   const cuts = new Map<string, number>();
-  if (hit) cuts.set(hit.id, hit.s);
   const clippedIds = new Set<string>();
-  if (hit) clippedIds.add(hit.id);
   pointer = { x: event.clientX, y: event.clientY, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
   renderer.domElement.setPointerCapture(event.pointerId);
   lastPinchDistance = pinchDistance();
