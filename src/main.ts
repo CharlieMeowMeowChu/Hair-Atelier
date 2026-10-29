@@ -370,6 +370,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
     return;
   }
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
+  if (tool !== 'rotate') return;
   const nextPinchDistance = pinchDistance();
   if (nextPinchDistance && lastPinchDistance) {
     camera.position.z = MathUtils.clamp(camera.position.z - (nextPinchDistance - lastPinchDistance) * 0.0025, 0.72, 2.2);
