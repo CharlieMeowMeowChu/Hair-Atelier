@@ -10,6 +10,7 @@
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
+| Production bundle 預算 | PASS | `Tools/check_bundle.mjs`：最大 JS bundle ≤600 KB raw／≤150 KB gzip；此為下載量 regression guard，不取代真機 FPS／memory 量測 |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
 | 本機 Chromium browser smoke | PASS | 2026-10-27：以 430×932 headless Chromium 載入 canvas；重載後 Service Worker controller 存在、favicon 存在，無 page error／console error；這不是 Safari 真機證據 |
 | 觸控界面實作 | IMPLEMENTED | `pointerdown/move/up/cancel` 旋轉 3D 畫面；畫面與按鈕有 touch-action 限制 |
