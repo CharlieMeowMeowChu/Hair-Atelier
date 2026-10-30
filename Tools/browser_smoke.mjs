@@ -169,11 +169,18 @@ try {
   parsed.indexedDbHistoryValid = (() => {
     try { return JSON.parse(indexedHistory).version === 2; } catch { return false; }
   })();
+  await client.command('Page.navigate', { url: appUrl });
+  const reloadDeadline = Date.now() + 10_000;
+  while (Date.now() < reloadDeadline) {
+    parsed.indexedDbReloaded = await evaluate(client, "document.querySelector('#status')?.textContent?.includes('已自動讀取本機儲存與操作歷史') ?? false");
+    if (parsed.indexedDbReloaded) break;
+    await delay(100);
+  }
   parsed.consoleErrors = consoleErrors;
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.rotateVisualChanged || !parsed.indexedDbHistoryValid || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.rotateVisualChanged || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, rotateVisualChanged=${parsed.rotateVisualChanged}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, rotateVisualChanged=${parsed.rotateVisualChanged}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, status=${parsed.status}`);
 } finally {
   client?.close();
   await stop(chrome);

@@ -589,8 +589,8 @@ document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', ()
   void loadPersistedEditor().then((restored) => {
     if (!restored) { appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
     editor = restored;
-    appStatus.textContent = '已讀取本機儲存與操作歷史';
     redraw();
+    appStatus.textContent = '已讀取本機儲存與操作歷史';
   });
 });
 document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => {
@@ -621,6 +621,6 @@ redraw();
 void loadPersistedEditor().then((restored) => {
   if (!restored) return;
   editor = restored;
-  appStatus.textContent = '已自動讀取本機儲存與操作歷史';
   redraw();
+  appStatus.textContent = '已自動讀取本機儲存與操作歷史';
 });
