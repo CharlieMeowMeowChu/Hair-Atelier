@@ -324,8 +324,21 @@ export function pointAt(strand: GuideStrand, s: number): Vec3 {
   return [base[0] + correction[0], base[1] + correction[1], base[2] + correction[2]];
 }
 
+export interface StrandSample {
+  readonly s: number;
+  readonly point: Vec3;
+}
+
+export function sampleStrandWithArcS(strand: GuideStrand, segments = 40): readonly StrandSample[] {
+  const count = Math.max(1, Math.floor(segments));
+  return Array.from({ length: count + 1 }, (_, index) => {
+    const s = (strand.length * index) / count;
+    return { s, point: pointAt(strand, s) };
+  });
+}
+
 export function sampleStrand(strand: GuideStrand, segments = 40): Vec3[] {
-  return Array.from({ length: segments + 1 }, (_, index) => pointAt(strand, (strand.length * index) / segments));
+  return sampleStrandWithArcS(strand, segments).map((sample) => sample.point);
 }
 
 export class HairEditor {

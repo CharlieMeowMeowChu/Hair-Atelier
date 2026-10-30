@@ -4,9 +4,10 @@ import {
   TorusGeometry, Vector2, Vector3, WebGLRenderer, type Vector3Tuple,
 } from 'three';
 import './style.css';
-import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, sampleStrand } from './hair-core';
+import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, sampleStrandWithArcS } from './hair-core';
 import { assessActionIntent } from './constraint-graph';
 import { hasExceededDragThreshold } from './input-gesture';
+import { projectPointToArcSegment } from './line-arc';
 import { RecentMeasurements } from './performance-metrics';
 
 const stage = document.querySelector<HTMLElement>('#stage');
@@ -151,18 +152,18 @@ function redraw(): void {
     const signature = JSON.stringify(strand);
     const existing = hairLines.get(strand.id);
     if (existing?.signature === signature) continue;
-    const sampled = sampleStrand(strand);
-    const points = sampled.map(([x, y, z]) => new Vector3(x, y, z));
+    const sampled = sampleStrandWithArcS(strand);
+    const points = sampled.map(({ point: [x, y, z] }) => new Vector3(x, y, z));
     const geometry = new BufferGeometry().setFromPoints(points);
     if (existing) {
       existing.line.geometry.dispose();
       existing.line.geometry = geometry;
-      existing.line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
+      existing.line.userData = { strandId: strand.id, sampleS: sampled.map((sample) => sample.s) };
       existing.signature = signature;
     } else {
       const material = new LineBasicMaterial({ color: colorForStrand(strand.id), linewidth: 2 });
       const line = new Line(geometry, material);
-      line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
+      line.userData = { strandId: strand.id, sampleS: sampled.map((sample) => sample.s) };
       hair.add(line);
       hairLines.set(strand.id, { line, signature });
     }
@@ -217,11 +218,24 @@ function hitHair(clientX: number, clientY: number): HairHit | undefined {
   const intersection = raycaster.intersectObjects([...hairLines.values()].map((record) => record.line), false)
     .find((candidate) => candidate.distance <= headDistance + 0.002);
   if (!intersection) return undefined;
-  const { strandId, strandLength, sampleCount } = intersection.object.userData as {
-    strandId: string; strandLength: number; sampleCount: number;
+  const { strandId, sampleS } = intersection.object.userData as {
+    strandId: string; sampleS: readonly number[];
   };
-  const segmentIndex = Math.max(0, Math.min(intersection.index ?? 0, sampleCount - 1));
-  return { id: strandId, s: strandLength * segmentIndex / (sampleCount - 1), point: intersection.point.clone() };
+  const line = intersection.object as Line;
+  const position = line.geometry.getAttribute('position');
+  if (!position || !Array.isArray(sampleS) || sampleS.length < 2) return undefined;
+  const segmentIndex = Math.max(0, Math.min(intersection.index ?? 0, sampleS.length - 2));
+  const start: Vector3Tuple = [position.getX(segmentIndex), position.getY(segmentIndex), position.getZ(segmentIndex)];
+  const end: Vector3Tuple = [position.getX(segmentIndex + 1), position.getY(segmentIndex + 1), position.getZ(segmentIndex + 1)];
+  const localPoint = line.worldToLocal(intersection.point.clone());
+  const projection = projectPointToArcSegment([localPoint.x, localPoint.y, localPoint.z], {
+    a: start, b: end, s0: sampleS[segmentIndex], s1: sampleS[segmentIndex + 1],
+  });
+  return {
+    id: strandId,
+    s: projection.s,
+    point: line.localToWorld(new Vector3(...projection.point)),
+  };
 }
 
 function sweepHits(fromX: number, fromY: number, toX: number, toY: number): HairHit[] {

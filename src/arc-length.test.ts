@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ArcLengthSampler, measuredRestArcLength, restPointAt, restTangentAt } from './arc-length';
-import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, type GuideStrand, type Vec3 } from './hair-core';
+import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, pointAt, sampleStrandWithArcS, type GuideStrand, type Vec3 } from './hair-core';
 
 const distance = (left: Vec3, right: Vec3): number => Math.hypot(
   left[0] - right[0], left[1] - right[1], left[2] - right[2],
@@ -52,6 +52,16 @@ describe('rest arc-length sampler', () => {
       expect(distance(at, after)).toBeCloseTo(epsilon, 8);
       expect(dot(sampler.tangentAtS(boundary - epsilon), sampler.tangentAtS(boundary + epsilon))).toBeGreaterThan(0.999999);
     }
+  });
+
+  it('carries exact rest arc endpoints into every rendered sample', () => {
+    const strand = testStrand({
+      curls: [{ startS: 0.04, endS: 0.32, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 }],
+    });
+    const samples = sampleStrandWithArcS(strand, 4);
+    expect(samples.map((sample) => sample.s)).toEqual([0, 0.1, 0.2, 0.30000000000000004, 0.4]);
+    samples.forEach((sample) => expect(distance(sample.point, pointAt(strand, sample.s))).toBeLessThan(1e-12));
+    expect(sampleStrandWithArcS(strand, 0).map((sample) => sample.s)).toEqual([0, 0.4]);
   });
 
   it('preserves every retained rest point when a curled strand is cut', () => {

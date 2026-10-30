@@ -20,7 +20,7 @@
 { strandId, s0, s1, a, b, radiusMeters }
 ```
 
-它計算 ray 對有限 capsule 中心線的最近點，按比例回傳 `materialS = lerp(s0, s1, segmentT)`；現有欄位名稱沿用，但它代表 v2 的 Rest arc `s`。這取代目前樣板用 `Line.raycast().index` 直接取樣點的近似，避免切口只落在 40 段取樣點。
+它計算 ray 對有限 capsule 中心線的最近點，按比例回傳 `materialS = lerp(s0, s1, segmentT)`；現有欄位名稱沿用，但它代表 v2 的 Rest arc `s`。目前樣板已把 Three.js Line 命中的 rendered segment 投影回其兩端 `s` 並作插值，避免切口只落在 40 段取樣點；完整 PickProxy 的 capsule、遮擋與決定性候選排序仍未接入畫面。
 
 決定性選擇順序如下：
 
