@@ -6,7 +6,7 @@
 |---|---|---|
 | P1-01 / W03 | 鎖定 Node、TypeScript、Vite、Three.js、Vitest，記錄 package-lock | `npm ci` 與 `npm run build` 成功 |
 | P1-02 / W03 | HairSandbox：camera、光、球體、A/B/C/D 彩色髮束，無正式美術 | 直向 canvas 可旋轉；PWA shell 可載入 |
-| P1-03 / W03 | core unit test、production build、browser smoke、Safari 接續途徑 | exit code＋測試結果＋build output；指定真機未測則標 NOT_TESTED |
+| P1-03 / W03 | core unit test、production build、browser smoke、Safari 接續途徑 | `npm run check:browser` 的 exit code＋測試結果＋build output；指定真機未測則標 NOT_TESTED |
 | P2-01 / W04 | stable ID、材料弧長及取樣、最小 ribbon | 節點增減曲線連續，根部穩定；數值可查 |
 | P2-02 / W05 | 指定 ID/s Cut，局部重建及切口插值 | HAIR-001/004/005；其他束完整狀態不變，重剪 no-op |
 | P2-03 / W06 | 真 3D CurlSegment 及 CurlLock | HAIR-002；保留前綴最大偏差 ≤0.0005m，捲參數不變 |

@@ -11,6 +11,7 @@
 | Three.js | package-lock.json | Three.js WebGL 技術樣板已使用 |
 | Vite | package-lock.json | production build PASS |
 | Vitest | package-lock.json | 57 項 core／手勢／效能／Rest arc／ribbon tests PASS |
+| Chromium（本機 smoke） | 154.0.8037.57；開發環境既有 | `npm run check:browser` PASS；只作本機 browser smoke，不代表 Safari 相容 |
 | Safari iPhone 16 Pro Max／iPad A16 | 待真機實測 | 未測，不能由桌面代替 |
 
 ## 已淘汰路徑的歷史紀錄

@@ -13,6 +13,7 @@
     "check:sw": "node --check public/sw.js && node Tools/test_service_worker.mjs",
     "check:pwa": "node Tools/check_pwa.mjs",
     "check:bundle": "node Tools/check_bundle.mjs",
+    "check:browser": "node Tools/browser_smoke.mjs",
     "check": "npm run test && npm run check:sw && npm run check:pwa && npm run build && npm run check:bundle"
   },
   "dependencies": {
