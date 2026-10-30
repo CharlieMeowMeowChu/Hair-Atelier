@@ -81,7 +81,13 @@ const tieMarkerGeometry = new TorusGeometry(0.025, 0.006, 8, 20);
 const tieMarkerMaterial = new MeshStandardMaterial({ color: '#f6a9be', roughness: 0.45 });
 const tieMarkerPool = new Map<string, Mesh>();
 hair.add(tieMarkers);
-const colors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
+const presetColors: Record<string, string> = { A: '#ff9c79', B: '#ffd66b', C: '#85d8ff', D: '#cb9dff' };
+function colorForStrand(id: string): string {
+  const preset = presetColors[id];
+  if (preset) return preset;
+  const hue = [...id].reduce((hash, character) => (hash * 31 + character.codePointAt(0)!) >>> 0, 0) % 360;
+  return `hsl(${hue} 78% 70%)`;
+}
 const hairLines = new Map<string, { line: Line; signature: string }>();
 type Tool = 'rotate' | 'select' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'halfup' | 'pair' | 'braid' | 'sweep' | 'grow';
 type HairHit = { id: string; s: number; point: Vector3 };
@@ -134,14 +140,14 @@ function redraw(): void {
       existing.line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
       existing.signature = signature;
     } else {
-      const material = new LineBasicMaterial({ color: colors[strand.id], linewidth: 2 });
+      const material = new LineBasicMaterial({ color: colorForStrand(strand.id), linewidth: 2 });
       const line = new Line(geometry, material);
       line.userData = { strandId: strand.id, strandLength: strand.length, sampleCount: points.length };
       hair.add(line);
       hairLines.set(strand.id, { line, signature });
     }
     const line = hairLines.get(strand.id)!.line;
-    (line.material as LineBasicMaterial).color.set(selectedStrandIds.has(strand.id) ? '#ffeaf1' : colors[strand.id]);
+    (line.material as LineBasicMaterial).color.set(selectedStrandIds.has(strand.id) ? '#ffeaf1' : colorForStrand(strand.id));
     rebuiltStrandCount += 1;
   }
   const activeTies = [...new Map(state.strands.flatMap((strand) => strand.tie ? [[strand.tie.id, strand.tie] as const] : [])).values()];
@@ -215,7 +221,7 @@ function highlightHair(strandId?: string): void {
     if (!(child instanceof Line)) continue;
     const material = (child as Line).material as LineBasicMaterial;
     const id = child.userData.strandId as string;
-    material.color.set(id === strandId ? '#ffffff' : selectedStrandIds.has(id) ? '#ffeaf1' : colors[id]);
+    material.color.set(id === strandId ? '#ffffff' : selectedStrandIds.has(id) ? '#ffeaf1' : colorForStrand(id));
   }
   requestRender();
 }
