@@ -1,0 +1,8 @@
+{
+  "scope": "Standalone C# toolchain only; no Unity project/API/HAIR test",
+  "compile_exit_code": 0,
+  "compile_output": "",
+  "execute_exit_code": 0,
+  "output": "CSHARP_ENVIRONMENT_SMOKE PASS: compile, execute, UTF-8 file round-trip",
+  "status": "PASS"
+}

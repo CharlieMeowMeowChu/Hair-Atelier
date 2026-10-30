@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#17141f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <title>Hair Atelier — Core Spike</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">HAIR ATELIER · 技術樣板</p>
+        <h1>捲曲、剪短、再增長</h1>
+        <p id="status" aria-live="polite">載入 3D 髮束中…</p>
+      </header>
+      <section id="stage" aria-label="可操作的三維髮束樣板"></section>
+      <dl id="overlay" aria-label="技術資料">
+        <div><dt>Selected</dt><dd id="metric-selected">—</dd></div>
+        <div><dt>Rest arc s</dt><dd id="metric-length">—</dd></div>
+        <div><dt>Curl r / pitch</dt><dd id="metric-curl">—</dd></div>
+        <div><dt>Cut preview</dt><dd id="metric-cut">—</dd></div>
+        <div><dt>Mesh update</dt><dd id="metric-mesh">—</dd></div>
+        <div><dt>Render p95</dt><dd id="metric-render">—</dd></div>
+      </dl>
+      <nav class="tools" aria-label="工具模式">
+        <button data-tool="rotate" class="active">旋轉</button>
+        <button data-tool="select">選取</button>
+        <button data-tool="cut">剪刀</button>
+        <button data-tool="clip">電剪</button>
+        <button data-tool="curl">捲髮器</button>
+        <button data-tool="comb">梳子</button>
+        <button data-tool="part">分界</button>
+        <button data-tool="tuck">夾耳後</button>
+        <button data-tool="ponytail">馬尾</button>
+        <button data-tool="halfup">公主頭</button>
+        <button data-tool="pair">兩束綁</button>
+        <button data-tool="braid">三股辮</button>
+        <button data-tool="sweep">側撥</button>
+        <button data-tool="grow">增髮</button>
+      </nav>
+      <label class="clipper-setting" for="clipper-length">電剪留髮 <output id="clipper-length-value">6 cm</output>
+        <input id="clipper-length" type="range" min="1" max="20" value="6" step="1" />
+      </label>
+      <label class="tie-setting" for="ponytail-height">馬尾位置
+        <select id="ponytail-height">
+          <option value="low">低位</option>
+          <option value="high">高位</option>
+        </select>
+      </label>
+      <label class="tie-setting" for="sweep-side">側撥方向
+        <select id="sweep-side">
+          <option value="left">左側</option>
+          <option value="right">右側</option>
+        </select>
+      </label>
+      <nav class="controls" aria-label="歷史操作">
+        <button id="undo" class="secondary">Undo</button>
+        <button id="redo" class="secondary">Redo</button>
+        <button id="clear-selection" class="secondary">取消選取</button>
+        <button id="save" class="secondary">儲存</button>
+        <button id="load" class="secondary">讀取</button>
+        <button id="front" class="secondary">回正面</button>
+        <button id="reset" class="secondary">重設樣板</button>
+      </nav>
+      <p class="hint">旋轉：單指拖動，兩指縮放。選取：點按髮束切換群組。兩束綁：先選兩束或以上，按髮根位置分成左右組。剪刀／電剪：沿髮束拖動後放手。捲髮器／梳子：按住髮束拖動。分界：在頭皮區域水平拖動。</p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

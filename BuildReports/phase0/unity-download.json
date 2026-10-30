@@ -1,0 +1,10 @@
+{
+  "version": "6000.3.27f1",
+  "releaseDate": "2026-10-20T13:42:16.544Z",
+  "url": "https://download.unity3d.com/download_unity/672d562a42a7/LinuxEditorInstaller/Unity-6000.3.27f1.tar.xz",
+  "bytes": 4573113148,
+  "official_integrity": "md5-69RDiGob9OioUv1r1ufMTA==",
+  "actual_integrity": "md5-69RDiGob9OioUv1r1ufMTA==",
+  "sha256": "35405a8582647692877065fe17699a31357113b7dd19e533b5966a5e314f6d52",
+  "integrity_status": "PASS"
+}
