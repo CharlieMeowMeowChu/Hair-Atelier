@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢單元測試 | PASS | Vitest：2 test files、28 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、分界不清除梳髮方向、左右夾耳狀態與 Undo、高低馬尾錨點與捲尾相對幾何、公主頭下半部保持自由、兩束共享 anchor 而保留 group ID、三股辮的相位分離與剪後資料保留、側撥保留梳髮方向、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向、保存資料、捲→剪→增→Undo/Redo→重載後的資料與取樣幾何重現，以及 6 px 工具拖動門檻 |
+| Core／手勢／效能單元測試 | PASS | Vitest：3 test files、30 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲及越過原髮尾後的連續捲曲延伸、多束單一 Undo、連剪不倒長、固定髮根、梳後剪仍保留幾何、分界不清除梳髮方向、左右夾耳狀態與 Undo、高低馬尾錨點與捲尾相對幾何、公主頭下半部保持自由、兩束共享 anchor 而保留 group ID、三股辮的相位分離與剪後資料保留、側撥保留梳髮方向、20 步 Undo、越界 Curl no-op、局部捲尾連續、左右捲向、保存資料、捲→剪→增→Undo/Redo→重載後的資料與取樣幾何重現、6 px 工具拖動門檻及 render p95 計算 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
 | Service Worker 行為檢查 | PASS | `Tools/test_service_worker.mjs` 模擬驗證舊 cache 清理、導航 network-first、離線 fallback，以及靜態資源 stale-while-revalidate；不取代 Safari 真機快取驗證 |
