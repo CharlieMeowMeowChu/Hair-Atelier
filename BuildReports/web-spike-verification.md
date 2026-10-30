@@ -15,7 +15,7 @@
 | Production bundle 預算 | PASS | `Tools/check_bundle.mjs`：最大 JS bundle ≤600 KB raw／≤150 KB gzip；此為下載量 regression guard，不取代真機 FPS／memory 量測 |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
 | 本機 Chromium browser smoke | PASS | 2026-10-30：`npm run check:browser` 以 430×932 headless Chromium、DevTools Protocol 啟動本機 Vite，確認 canvas=1、`Rest arc s` overlay、模擬單指拖動及雙指 pinch 後畫面有變化、按儲存後 IndexedDB v2 history 可讀回，重載後會自動讀回；待 Service Worker 接管後斷網重載仍可載入 canvas，且無 app runtime／console error（Vite 的預期 HMR 斷線訊息除外）。此為本機 smoke，不能取代 iPhone／iPad Safari 證據。 |
-| 觸控界面實作 | IMPLEMENTED | `pointerdown/move/up/cancel` 旋轉 3D 畫面；畫面與按鈕有 touch-action 限制 |
+| 觸控界面實作 | IMPLEMENTED | `pointerdown/move/up/cancel` 旋轉 3D 畫面；canvas 為 `touch-action: none`，所有按鈕與 select 的實際點按高度至少 44px，並由本機 browser smoke 檢查 |
 | 自由檢視手勢 | IMPLEMENTED | 單指可水平旋轉與上下傾斜；兩指 pinch 可在 0.72–2.2 m 相機距離內縮放；尚未真機驗證手勢細節 |
 | 工具／鏡頭手勢優先序 | IMPLEMENTED | 只有「旋轉」模式可轉頭或縮放；選取、造型及剪髮工具的 pointer move 不會穿透成鏡頭操作；造型中出現第二指會取消未提交手勢，避免誤剪；真機多點觸控仍待驗證 |
 | 回正面視角 | IMPLEMENTED | 將水平／垂直旋轉及縮放重設為固定正面視角；不修改任何 HairState 或 Undo／Redo 歷史 |
