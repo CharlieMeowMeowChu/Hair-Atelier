@@ -1,6 +1,6 @@
 # Web Core Spike 驗證紀錄
 
-日期：2026-10-27（香港）。分支：`phase0/environment-readiness`。
+最新驗證：2026-10-30（香港）。分支：`phase0/environment-readiness`。
 
 ## 已通過
 
@@ -44,7 +44,7 @@
 - Safari／iPhone 16 Pro Max／iPad A16 尚未真機打開；FPS、記憶體、離線與背景恢復均為 NOT_TESTED。
 - Production build 的 Three.js 主 bundle 為約 518 KB（gzip 約 134 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。
 - 此原型已有命中高亮、頭部遮擋 raycast、拖掃補取樣及最小 Guide ribbon；另有未接入畫面的純 TypeScript PickProxy／ConstraintGraph 契約與單元測試。尚未提供密集髮束空間索引、髮束互相遮擋、最終髮絲／髮片材質或 ribbon LOD。這些仍須在後續 Gate 3／4 驗收。
-- 這是 4 條彩色 GuideStrand 與球體，不是全頭髮、真人模型、物理碰撞、馬尾或辮子。
+- 這是 4 條彩色 GuideStrand 與球體，不是全頭髮、真人模型、完整物理碰撞或完整馬尾／辮子系統；上表所列的馬尾、公主頭、兩束綁與三股辮只屬資料／互動原型。
 - 此 PR 每次更新會由既有 GitHub Vercel integration 自動建立 Preview deployment。2026-10-30 由未登入環境讀取時回傳 Vercel SSO 登入頁，故它不是公開的 Safari Gate 2 網址；已登入 project 帳戶才可使用。它不是正式發佈、未作 Safari／Gate 驗收，亦不代表已安裝到裝置；本次沒有手動部署、production release 或 merge。
 
 ## 重跑

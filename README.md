@@ -24,6 +24,6 @@ GitHub Actions 在 push 與 PR 使用 `.nvmrc` 的 Node.js 24.19.0 重跑 `npm c
 
 `npm run check:browser` 只在已安裝 Chromium 的開發環境執行，會以 DevTools Protocol 檢查 canvas、overlay 及 page error；它不取代 Safari 真機驗收，因此不放入 GitHub Actions。
 
-PWA manifest 與 service worker 已建立；暫不部署。請用 iPhone 16 Pro Max 及 iPad A16 的 Safari 作後續真機驗證，不能用桌面結果取代。
+PWA manifest 與 service worker 已建立。此 PR 的既有 Vercel integration 會自動產生受 SSO 保護的 Preview；沒有手動部署、production release 或公開 Safari Gate 網址。請用 iPhone 16 Pro Max 及 iPad A16 的 Safari 作後續真機驗證，不能用桌面結果取代。
 
 下一步工作單：[Phase 1–2](Docs/phase1-2-work-orders.md)。所有修改經分支及 PR；不自動 merge、不發佈遊戲。
