@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：7 test files、54 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp 與退化段測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：8 test files、57 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
 | Service Worker 行為檢查 | PASS | `Tools/test_service_worker.mjs` 模擬驗證舊 cache 清理、導航 network-first、離線 fallback，以及靜態資源 stale-while-revalidate；不取代 Safari 真機快取驗證 |
@@ -34,15 +34,16 @@
 | 快速拖掃 | IMPLEMENTED | 剪刀／電剪超過 6 px 拖動門檻後才啟動；兩個 PointerEvent 之間每 8 px 補取樣；一次手勢可剪多束，並合併成單一 Undo 指令 |
 | 靜止耗電控制 | IMPLEMENTED | 取消永久 animation loop；旋轉、選取、資料更新或 resize 時才要求下一幀渲染 |
 | 技術 overlay | IMPLEMENTED | 即時顯示 selected strand ID、Rest arc `s`、curl radius/pitch、cut preview `s`、geometry rebuild 毫秒數及最近 120 次 render 的 p95 耗時；render p95 不等於整體 frame time。W04 core 以 schema v2／`ArcLengthSampler` 實作並測試真實 Rest arc length；Safari 真機 Gate 2 仍未完成，見 `Docs/pick-and-constraint-contract.md`。 |
-| 局部幾何更新 | IMPLEMENTED | renderer 保留各 GuideStrand 的 Line；只替換資料 signature 改變的 geometry，並在 overlay 顯示本次 rebuild 髮束數；移除的髮束會釋放 geometry/material；A–D 保留示範色，新增穩定 ID 會有決定性 fallback 色，支援日後擴至 20 條導引束 |
+| 最小 Guide ribbon | IMPLEMENTED | 每條 Rest arc sample 生成窄、雙面的 3D ribbon；以平行傳輸近似保持寬度，重複 sample 仍產生有限幾何。ribbon 只屬 render 衍生物，中心線仍是唯一可編輯資料；不是最終髮絲／髮片美術。 |
+| 局部幾何更新 | IMPLEMENTED | renderer 同時保留每條 GuideStrand 的不可見 Line 拾取中心線與可見 ribbon；只替換資料 signature 改變的兩種 geometry，並在 overlay 顯示本次 rebuild 髮束數；移除的髮束會釋放 geometry/material；A–D 保留示範色，新增穩定 ID 會有決定性 fallback 色，支援日後擴至 20 條導引束 |
 | PWA 基礎 | IMPLEMENTED | manifest、內建 SVG app icon／favicon、iOS standalone／status-bar metadata；service worker 導航採 network-first、靜態資源 stale-while-revalidate，啟用時清理舊版本 cache；語法與行為模擬測試通過，未做離線或加入主畫面真機驗證 |
 | 本機儲存／讀取 | IMPLEMENTED | 每次有效髮型操作與 Undo／Redo 寫入 `editor-history.v2` localStorage；現行存檔包含當前狀態及最多 20 步 Undo／Redo 歷史，讀取會驗證每個 history snapshot；舊 v1 single HairState 與 v1 history 會遷移為 v2，且保留舊 key 不刪除；未做 Safari 重開真機驗證 |
 
 ## 尚未通過／未聲稱完成
 
 - Safari／iPhone 16 Pro Max／iPad A16 尚未真機打開；FPS、記憶體、離線與背景恢復均為 NOT_TESTED。
-- Production build 的 Three.js 主 bundle 為約 511 KB（gzip 約 131 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。
-- 此原型已有命中高亮、頭部遮擋 raycast 與拖掃補取樣；另有未接入畫面的純 TypeScript PickProxy／ConstraintGraph 契約與單元測試。尚未提供剪刀模型、密集髮束空間索引、髮束互相遮擋或 ribbon mesh 的局部重建。這些仍須在後續 Gate 3 驗收。
+- Production build 的 Three.js 主 bundle 為約 518 KB（gzip 約 134 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。
+- 此原型已有命中高亮、頭部遮擋 raycast、拖掃補取樣及最小 Guide ribbon；另有未接入畫面的純 TypeScript PickProxy／ConstraintGraph 契約與單元測試。尚未提供密集髮束空間索引、髮束互相遮擋、最終髮絲／髮片材質或 ribbon LOD。這些仍須在後續 Gate 3／4 驗收。
 - 這是 4 條彩色 GuideStrand 與球體，不是全頭髮、真人模型、物理碰撞、馬尾或辮子。
 - 此 PR 每次更新會由既有 GitHub Vercel integration 自動建立 Preview deployment。它不是正式發佈、未作 Safari／Gate 驗收，亦不代表已安裝到裝置；本次沒有手動部署、production release 或 merge。
 

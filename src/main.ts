@@ -1,14 +1,15 @@
 import {
-  BufferGeometry, CircleGeometry, Color, DoubleSide, Group, HemisphereLight, Line, LineBasicMaterial, MathUtils,
+  BufferAttribute, BufferGeometry, CircleGeometry, Color, DoubleSide, Group, HemisphereLight, Line, LineBasicMaterial, MathUtils,
   Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Raycaster, RingGeometry, Scene, SphereGeometry,
   TorusGeometry, Vector2, Vector3, WebGLRenderer, type Vector3Tuple,
 } from 'three';
 import './style.css';
-import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, sampleStrandWithArcS } from './hair-core';
+import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, sampleStrandWithArcS, type Vec3 } from './hair-core';
 import { assessActionIntent } from './constraint-graph';
 import { hasExceededDragThreshold } from './input-gesture';
 import { projectPointToArcSegment } from './line-arc';
 import { RecentMeasurements } from './performance-metrics';
+import { buildRibbonGeometryData } from './ribbon-geometry';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -109,7 +110,8 @@ function colorForStrand(id: string): string {
   const hue = [...id].reduce((hash, character) => (hash * 31 + character.codePointAt(0)!) >>> 0, 0) % 360;
   return `hsl(${hue} 78% 70%)`;
 }
-const hairLines = new Map<string, { line: Line; signature: string }>();
+const hairLines = new Map<string, { line: Line; ribbon: Mesh; signature: string }>();
+const guideRibbonWidthMeters = 0.006;
 type Tool = 'rotate' | 'select' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'halfup' | 'pair' | 'braid' | 'sweep' | 'grow';
 type HairHit = { id: string; s: number; point: Vector3 };
 let tool: Tool = 'rotate';
@@ -136,6 +138,15 @@ scissorsCursor.add(bladeA, bladeB, new Mesh(new CircleGeometry(0.006, 16), new M
 scissorsCursor.visible = false;
 scene.add(scissorsCursor);
 
+function createRibbonGeometry(points: readonly Vec3[]): BufferGeometry {
+  const data = buildRibbonGeometryData(points, guideRibbonWidthMeters);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
+  geometry.setIndex(new BufferAttribute(data.indices, 1));
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
 function redraw(): void {
   const startedAt = performance.now();
   rebuiltStrandCount = 0;
@@ -143,9 +154,11 @@ function redraw(): void {
   const activeIds = new Set(state.strands.map((strand) => strand.id));
   for (const [id, record] of hairLines) {
     if (activeIds.has(id)) continue;
-    hair.remove(record.line);
+    hair.remove(record.line, record.ribbon);
     record.line.geometry.dispose();
     (Array.isArray(record.line.material) ? record.line.material : [record.line.material]).forEach((material) => material.dispose());
+    record.ribbon.geometry.dispose();
+    (Array.isArray(record.ribbon.material) ? record.ribbon.material : [record.ribbon.material]).forEach((material) => material.dispose());
     hairLines.delete(id);
   }
   for (const strand of state.strands) {
@@ -155,20 +168,26 @@ function redraw(): void {
     const sampled = sampleStrandWithArcS(strand);
     const points = sampled.map(({ point: [x, y, z] }) => new Vector3(x, y, z));
     const geometry = new BufferGeometry().setFromPoints(points);
+    const ribbonGeometry = createRibbonGeometry(sampled.map((sample) => sample.point));
     if (existing) {
       existing.line.geometry.dispose();
       existing.line.geometry = geometry;
+      existing.ribbon.geometry.dispose();
+      existing.ribbon.geometry = ribbonGeometry;
       existing.line.userData = { strandId: strand.id, sampleS: sampled.map((sample) => sample.s) };
       existing.signature = signature;
     } else {
-      const material = new LineBasicMaterial({ color: colorForStrand(strand.id), linewidth: 2 });
+      const material = new LineBasicMaterial({ color: colorForStrand(strand.id), linewidth: 1, transparent: true, opacity: 0, depthWrite: false });
       const line = new Line(geometry, material);
       line.userData = { strandId: strand.id, sampleS: sampled.map((sample) => sample.s) };
-      hair.add(line);
-      hairLines.set(strand.id, { line, signature });
+      const ribbon = new Mesh(ribbonGeometry, new MeshBasicMaterial({
+        color: colorForStrand(strand.id), side: DoubleSide, transparent: true, opacity: 0.88, depthWrite: false,
+      }));
+      hair.add(line, ribbon);
+      hairLines.set(strand.id, { line, ribbon, signature });
     }
-    const line = hairLines.get(strand.id)!.line;
-    (line.material as LineBasicMaterial).color.set(selectedStrandIds.has(strand.id) ? '#ffeaf1' : colorForStrand(strand.id));
+    const record = hairLines.get(strand.id)!;
+    (record.ribbon.material as MeshBasicMaterial).color.set(selectedStrandIds.has(strand.id) ? '#ffeaf1' : colorForStrand(strand.id));
     rebuiltStrandCount += 1;
   }
   const activeTies = [...new Map(state.strands.flatMap((strand) => strand.tie ? [[strand.tie.id, strand.tie] as const] : [])).values()];
@@ -251,11 +270,10 @@ function sweepHits(fromX: number, fromY: number, toX: number, toY: number): Hair
 }
 
 function highlightHair(strandId?: string): void {
-  for (const child of hair.children) {
-    if (!(child instanceof Line)) continue;
-    const material = (child as Line).material as LineBasicMaterial;
-    const id = child.userData.strandId as string;
-    material.color.set(id === strandId ? '#ffffff' : selectedStrandIds.has(id) ? '#ffeaf1' : colorForStrand(id));
+  for (const [id, record] of hairLines) {
+    (record.ribbon.material as MeshBasicMaterial).color.set(
+      id === strandId ? '#ffffff' : selectedStrandIds.has(id) ? '#ffeaf1' : colorForStrand(id),
+    );
   }
   requestRender();
 }
