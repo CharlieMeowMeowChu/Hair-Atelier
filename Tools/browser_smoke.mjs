@@ -154,6 +154,14 @@ try {
   await delay(100);
   const afterRotate = await screenshot(client);
   parsed.rotateVisualChanged = beforeRotate !== afterRotate;
+  await client.command('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
+  const beforePinch = await screenshot(client);
+  await client.command('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 180, y: 390, id: 1 }, { x: 230, y: 390, id: 2 }] });
+  await client.command('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 140, y: 390, id: 1 }, { x: 270, y: 390, id: 2 }] });
+  await client.command('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await delay(100);
+  const afterPinch = await screenshot(client);
+  parsed.pinchVisualChanged = beforePinch !== afterPinch;
   const indexedHistory = await evaluate(client, `new Promise((resolve) => {
     document.querySelector('#save')?.click();
     setTimeout(() => {
@@ -177,10 +185,10 @@ try {
     await delay(100);
   }
   parsed.consoleErrors = consoleErrors;
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.rotateVisualChanged || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, rotateVisualChanged=${parsed.rotateVisualChanged}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, status=${parsed.status}`);
 } finally {
   client?.close();
   await stop(chrome);
