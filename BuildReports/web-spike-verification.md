@@ -13,7 +13,7 @@
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | Production bundle 預算 | PASS | `Tools/check_bundle.mjs`：最大 JS bundle ≤600 KB raw／≤150 KB gzip；此為下載量 regression guard，不取代真機 FPS／memory 量測 |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
-| 本機 Chromium browser smoke | PASS | 2026-10-30：`npm run check:browser` 以 430×932 headless Chromium、DevTools Protocol 啟動本機 Vite，確認 canvas=1、`Rest arc s` overlay、初始狀態已離開 loading，且無 page runtime／console error。此為本機 smoke，不能取代 iPhone／iPad Safari 證據。 |
+| 本機 Chromium browser smoke | PASS | 2026-10-30：`npm run check:browser` 以 430×932 headless Chromium、DevTools Protocol 啟動本機 Vite，確認 canvas=1、`Rest arc s` overlay、初始狀態已離開 loading、模擬拖動後畫面有變化，且無 page runtime／console error。此為本機 smoke，不能取代 iPhone／iPad Safari 證據。 |
 | 觸控界面實作 | IMPLEMENTED | `pointerdown/move/up/cancel` 旋轉 3D 畫面；畫面與按鈕有 touch-action 限制 |
 | 自由檢視手勢 | IMPLEMENTED | 單指可水平旋轉與上下傾斜；兩指 pinch 可在 0.72–2.2 m 相機距離內縮放；尚未真機驗證手勢細節 |
 | 工具／鏡頭手勢優先序 | IMPLEMENTED | 只有「旋轉」模式可轉頭或縮放；選取、造型及剪髮工具的 pointer move 不會穿透成鏡頭操作；造型中出現第二指會取消未提交手勢，避免誤剪；真機多點觸控仍待驗證 |

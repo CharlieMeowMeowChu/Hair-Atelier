@@ -93,6 +93,10 @@ async function evaluate(client, expression) {
   return result.result.value;
 }
 
+async function screenshot(client) {
+  return (await client.command('Page.captureScreenshot', { format: 'png' })).data;
+}
+
 let vite;
 let chrome;
 let profileDirectory;
@@ -143,11 +147,18 @@ try {
     await delay(100);
   }
   const parsed = JSON.parse(state ?? '{}');
+  const beforeRotate = await screenshot(client);
+  await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', x: 160, y: 380, button: 'left', clickCount: 1 });
+  await client.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 270, y: 400, button: 'left', buttons: 1 });
+  await client.command('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 270, y: 400, button: 'left', clickCount: 1 });
+  await delay(100);
+  const afterRotate = await screenshot(client);
+  parsed.rotateVisualChanged = beforeRotate !== afterRotate;
   parsed.consoleErrors = consoleErrors;
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.rotateVisualChanged || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, rotateVisualChanged=${parsed.rotateVisualChanged}, status=${parsed.status}`);
 } finally {
   client?.close();
   await stop(chrome);
