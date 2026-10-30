@@ -31,6 +31,7 @@
 | 指標 | iPhone 16 Pro Max | iPad A16 | 備註 |
 |---|---|---|---|
 | 操作期間可感知卡頓 | 待測 | 待測 | |
+| app 內最近 render p95 | 待量測 | 待量測 | 只量 `renderer.render()` 耗時，不是整體 frame time |
 | p95 frame time | 待量測 | 待量測 | Safari Inspector 可用時才填 |
 | memory | 待量測 | 待量測 | Safari Inspector 可用時才填 |
 | 5 分鐘連續操作／溫度 | 待測 | 待測 | |

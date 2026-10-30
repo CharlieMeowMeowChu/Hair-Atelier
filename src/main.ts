@@ -6,6 +6,7 @@ import {
 import './style.css';
 import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, sampleStrand } from './hair-core';
 import { hasExceededDragThreshold } from './input-gesture';
+import { RecentMeasurements } from './performance-metrics';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -17,6 +18,7 @@ const metrics = {
   curl: document.querySelector<HTMLElement>('#metric-curl'),
   cut: document.querySelector<HTMLElement>('#metric-cut'),
   mesh: document.querySelector<HTMLElement>('#metric-mesh'),
+  render: document.querySelector<HTMLElement>('#metric-render'),
 };
 
 const storageKey = 'hair-atelier.editor-history.v1';
@@ -49,12 +51,16 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(stage.clientWidth, stage.clientHeight);
 stage.append(renderer.domElement);
 let renderPending = false;
+const renderMeasurements = new RecentMeasurements();
 function requestRender(): void {
   if (renderPending) return;
   renderPending = true;
   requestAnimationFrame(() => {
     renderPending = false;
+    const startedAt = performance.now();
     renderer.render(scene, camera);
+    renderMeasurements.add(performance.now() - startedAt);
+    if (metrics.render) metrics.render.textContent = renderMeasurements.p95 === undefined ? '—' : `${renderMeasurements.p95.toFixed(2)} ms`;
   });
 }
 
