@@ -1,4 +1,5 @@
 import { assessActionIntent } from './constraint-graph';
+import { restPointAt } from './arc-length';
 
 export type Vec3 = readonly [number, number, number];
 
@@ -47,15 +48,28 @@ export interface BraidConstraint {
 }
 
 export interface HairState {
-  readonly schemaVersion: 1;
+  /** schema v2 defines every persisted s/length in physical rest arc metres. */
+  readonly schemaVersion: 2;
   readonly strands: readonly GuideStrand[];
 }
 
 export interface EditorHistory {
-  readonly version: 1;
+  readonly version: 2;
   readonly current: HairState;
   readonly undo: readonly HairState[];
   readonly redo: readonly HairState[];
+}
+
+interface LegacyHairState {
+  readonly schemaVersion: 1;
+  readonly strands: readonly GuideStrand[];
+}
+
+interface LegacyEditorHistory {
+  readonly version: 1;
+  readonly current: LegacyHairState;
+  readonly undo: readonly LegacyHairState[];
+  readonly redo: readonly LegacyHairState[];
 }
 
 export interface EditResult {
@@ -86,30 +100,149 @@ export function canonicalState(state: HairState): string {
   });
 }
 
+const vectorIsValid = (vector: unknown): vector is Vec3 => Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
+const vectorHasLength = (vector: Vec3): boolean => Math.hypot(vector[0], vector[1], vector[2]) > 1e-10;
+
+function tieIsValid(value: unknown): value is HairTie {
+  if (!value || typeof value !== 'object') return false;
+  const tie = value as Partial<HairTie>;
+  return typeof tie.id === 'string' && tie.id.length > 0 && vectorIsValid(tie.anchor) && Number.isFinite(tie.gatherS) && tie.gatherS! > 0;
+}
+
+function braidIsValid(value: unknown): value is BraidConstraint {
+  if (!value || typeof value !== 'object') return false;
+  const braid = value as Partial<BraidConstraint>;
+  return typeof braid.id === 'string' && braid.id.length > 0 && [0, 1, 2].includes(braid.index ?? -1) && vectorIsValid(braid.axisOrigin) &&
+    Number.isFinite(braid.startS) && Number.isFinite(braid.endS) && braid.endS! > braid.startS! &&
+    Number.isFinite(braid.radius) && braid.radius! > 0 && Number.isFinite(braid.pitch) && braid.pitch! > 0;
+}
+
+function curlIsValid(value: unknown): value is CurlSegment {
+  if (!value || typeof value !== 'object') return false;
+  const curl = value as Partial<CurlSegment>;
+  return Number.isFinite(curl.startS) && Number.isFinite(curl.endS) && Number.isFinite(curl.radius) && Number.isFinite(curl.pitch) && Number.isFinite(curl.phase) &&
+    curl.startS! >= 0 && curl.endS! > curl.startS! && curl.radius! > 0 && curl.pitch! > 0 && (curl.direction === -1 || curl.direction === 1);
+}
+
+function strandIsValid(value: unknown, requirePhysicalRanges: boolean): value is GuideStrand {
+  if (!value || typeof value !== 'object') return false;
+  const strand = value as Partial<GuideStrand>;
+  if (typeof strand.id !== 'string' || strand.id.length === 0 || !vectorIsValid(strand.root) || !vectorIsValid(strand.direction) || !vectorHasLength(strand.direction) ||
+    (strand.partingOffset !== undefined && !vectorIsValid(strand.partingOffset)) ||
+    (strand.sideSweepOffset !== undefined && !vectorIsValid(strand.sideSweepOffset)) ||
+    (strand.earTuck !== undefined && strand.earTuck !== 'left' && strand.earTuck !== 'right') ||
+    (strand.tie !== undefined && !tieIsValid(strand.tie)) || (strand.braid !== undefined && !braidIsValid(strand.braid)) ||
+    !Number.isFinite(strand.length) || !Number.isFinite(strand.maximumLength) || strand.length! < 0 || strand.maximumLength! < strand.length! ||
+    !Array.isArray(strand.curls) || !strand.curls.every(curlIsValid)) return false;
+  if (!requirePhysicalRanges) return true;
+  if (strand.tie && strand.tie.gatherS > strand.maximumLength! + 1e-9) return false;
+  if (strand.braid && strand.braid.endS > strand.maximumLength! + 1e-9) return false;
+  let previousEnd = 0;
+  for (const curl of strand.curls) {
+    if (curl.startS < previousEnd - 1e-9 || curl.endS > strand.maximumLength! + 1e-9) return false;
+    previousEnd = curl.endS;
+  }
+  return true;
+}
+
+function stateHasValidStrands(strands: unknown, requirePhysicalRanges: boolean): strands is readonly GuideStrand[] {
+  return Array.isArray(strands) && strands.length > 0 && strands.every((strand) => strandIsValid(strand, requirePhysicalRanges)) &&
+    new Set(strands.map((strand) => strand.id)).size === strands.length;
+}
+
+interface LegacyArcSample {
+  readonly u: number;
+  readonly s: number;
+}
+
+function legacyRestPointAt(strand: GuideStrand, u: number): Vec3 {
+  const clamped = Math.max(0, Math.min(u, strand.maximumLength));
+  const partingOffset = strand.partingOffset ?? [0, 0, 0] as Vec3;
+  const sideSweepOffset = strand.sideSweepOffset ?? [0, 0, 0] as Vec3;
+  const point: [number, number, number] = [
+    strand.root[0] + (strand.direction[0] + partingOffset[0] + sideSweepOffset[0]) * clamped,
+    strand.root[1] + (strand.direction[1] + partingOffset[1] + sideSweepOffset[1]) * clamped,
+    strand.root[2] + (strand.direction[2] + partingOffset[2] + sideSweepOffset[2]) * clamped,
+  ];
+  for (const curl of strand.curls) {
+    const curlU = Math.max(curl.startS, Math.min(clamped, curl.endS));
+    if (curlU <= curl.startS) continue;
+    const phase = curl.phase + curl.direction * ((curlU - curl.startS) / curl.pitch) * Math.PI * 2;
+    point[0] += curl.radius * (Math.cos(phase) - Math.cos(curl.phase));
+    point[2] += curl.radius * (Math.sin(phase) - Math.sin(curl.phase));
+  }
+  return point;
+}
+
+function legacyArcMap(strand: GuideStrand): readonly LegacyArcSample[] {
+  const step = 0.00025;
+  const count = Math.max(1, Math.ceil(strand.maximumLength / step));
+  const samples: LegacyArcSample[] = [{ u: 0, s: 0 }];
+  let previousPoint = legacyRestPointAt(strand, 0);
+  let total = 0;
+  for (let index = 1; index <= count; index += 1) {
+    const u = index === count ? strand.maximumLength : index * step;
+    const point = legacyRestPointAt(strand, u);
+    total += Math.hypot(point[0] - previousPoint[0], point[1] - previousPoint[1], point[2] - previousPoint[2]);
+    samples.push({ u, s: total });
+    previousPoint = point;
+  }
+  return samples;
+}
+
+function sAtLegacyU(samples: readonly LegacyArcSample[], u: number): number {
+  const target = Math.max(0, Math.min(u, samples.at(-1)!.u));
+  let low = 0;
+  let high = samples.length - 1;
+  while (low + 1 < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (samples[middle].u < target) low = middle;
+    else high = middle;
+  }
+  const before = samples[low];
+  const after = samples[high];
+  const span = after.u - before.u;
+  return span <= 0 ? before.s : before.s + (after.s - before.s) * ((target - before.u) / span);
+}
+
+/** Converts persisted v1 parameter coordinates into v2 physical rest arc metres. */
+function migrateLegacyHairState(state: LegacyHairState): HairState | undefined {
+  if (!stateHasValidStrands(state.strands, false)) return undefined;
+  const strands = state.strands.map((legacy) => {
+    const samples = legacyArcMap(legacy);
+    const maximumLength = samples.at(-1)!.s;
+    const visibleLength = sAtLegacyU(samples, legacy.length);
+    const curls = [...legacy.curls]
+      .sort((left, right) => left.startS - right.startS)
+      .map((curl, index, all) => ({
+        ...curl,
+        startS: sAtLegacyU(samples, curl.startS),
+        endS: curl.endS >= legacy.length - 1e-9 && index === all.length - 1 ? maximumLength : sAtLegacyU(samples, curl.endS),
+      }));
+    const tie = legacy.tie ? { ...legacy.tie, gatherS: sAtLegacyU(samples, legacy.tie.gatherS) } : undefined;
+    const braid = legacy.braid ? {
+      ...legacy.braid,
+      startS: sAtLegacyU(samples, legacy.braid.startS),
+      endS: sAtLegacyU(samples, legacy.braid.endS),
+    } : undefined;
+    return { ...legacy, length: visibleLength, maximumLength, curls, tie, braid };
+  });
+  const migrated: HairState = { schemaVersion: 2, strands };
+  return stateHasValidStrands(migrated.strands, true) ? copyState(migrated) : undefined;
+}
+
 export function parseHairState(serialized: string): HairState | undefined {
   try {
     const value: unknown = JSON.parse(serialized);
     if (!value || typeof value !== 'object') return undefined;
-    const state = value as Partial<HairState>;
-    if (state.schemaVersion !== 1 || !Array.isArray(state.strands) || state.strands.length === 0) return undefined;
-    const valid = state.strands.every((strand) => {
-      if (!strand || typeof strand !== 'object') return false;
-      const candidate = strand as Partial<GuideStrand>;
-      const vectorIsValid = (vector: unknown): vector is Vec3 => Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
-      return typeof candidate.id === 'string' && candidate.id.length > 0 && vectorIsValid(candidate.root) && vectorIsValid(candidate.direction) &&
-        (candidate.partingOffset === undefined || vectorIsValid(candidate.partingOffset)) &&
-        (candidate.sideSweepOffset === undefined || vectorIsValid(candidate.sideSweepOffset)) &&
-        (candidate.earTuck === undefined || candidate.earTuck === 'left' || candidate.earTuck === 'right') &&
-        (candidate.tie === undefined || typeof candidate.tie.id === 'string' && vectorIsValid(candidate.tie.anchor) && Number.isFinite(candidate.tie.gatherS) && candidate.tie.gatherS > 0) &&
-        (candidate.braid === undefined || typeof candidate.braid.id === 'string' && [0, 1, 2].includes(candidate.braid.index) && vectorIsValid(candidate.braid.axisOrigin) &&
-          Number.isFinite(candidate.braid.startS) && Number.isFinite(candidate.braid.endS) && candidate.braid.endS > candidate.braid.startS &&
-          Number.isFinite(candidate.braid.radius) && candidate.braid.radius > 0 && Number.isFinite(candidate.braid.pitch) && candidate.braid.pitch > 0) &&
-        Number.isFinite(candidate.length) && Number.isFinite(candidate.maximumLength) && candidate.length! >= 0 && candidate.maximumLength! >= candidate.length! &&
-        Array.isArray(candidate.curls) && candidate.curls.every((curl) => curl && Number.isFinite(curl.startS) && Number.isFinite(curl.endS) &&
-          Number.isFinite(curl.radius) && Number.isFinite(curl.pitch) && Number.isFinite(curl.phase) && curl.startS >= 0 && curl.endS > curl.startS &&
-          curl.radius > 0 && curl.pitch > 0 && (curl.direction === -1 || curl.direction === 1));
-    });
-    return valid ? copyState(state as HairState) : undefined;
+    const candidate = value as Partial<HairState> | Partial<LegacyHairState>;
+    if (candidate.schemaVersion === 2 && stateHasValidStrands(candidate.strands, true)) {
+      return copyState(candidate as HairState);
+    }
+    if (candidate.schemaVersion === 1 && stateHasValidStrands(candidate.strands, false)) {
+      return migrateLegacyHairState(candidate as LegacyHairState);
+    }
+    return undefined;
   } catch {
     return undefined;
   }
@@ -119,8 +252,8 @@ export function parseEditorHistory(serialized: string): EditorHistory | undefine
   try {
     const value: unknown = JSON.parse(serialized);
     if (!value || typeof value !== 'object') return undefined;
-    const candidate = value as Partial<EditorHistory>;
-    if (candidate.version !== 1 || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo) ||
+    const candidate = value as Partial<EditorHistory> | Partial<LegacyEditorHistory>;
+    if ((candidate.version !== 1 && candidate.version !== 2) || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo) ||
       candidate.undo.length > 20 || candidate.redo.length > 20) return undefined;
     const parseState = (state: unknown): HairState | undefined => parseHairState(JSON.stringify(state));
     const current = parseState(candidate.current);
@@ -128,7 +261,7 @@ export function parseEditorHistory(serialized: string): EditorHistory | undefine
     const redo = candidate.redo.map(parseState);
     if (!current || undo.some((state) => !state) || redo.some((state) => !state)) return undefined;
     return {
-      version: 1,
+      version: 2,
       current,
       undo: undo as HairState[],
       redo: redo as HairState[],
@@ -140,20 +273,8 @@ export function parseEditorHistory(serialized: string): EditorHistory | undefine
 
 function pointWithoutTie(strand: GuideStrand, s: number): Vec3 {
   const clampedS = Math.max(0, Math.min(s, strand.length));
-  const partingOffset = strand.partingOffset ?? [0, 0, 0] as Vec3;
-  const sideSweepOffset = strand.sideSweepOffset ?? [0, 0, 0] as Vec3;
-  const base: [number, number, number] = [
-    strand.root[0] + (strand.direction[0] + partingOffset[0] + sideSweepOffset[0]) * clampedS,
-    strand.root[1] + (strand.direction[1] + partingOffset[1] + sideSweepOffset[1]) * clampedS,
-    strand.root[2] + (strand.direction[2] + partingOffset[2] + sideSweepOffset[2]) * clampedS,
-  ];
-  for (const curl of strand.curls) {
-    const curlS = Math.max(curl.startS, Math.min(clampedS, curl.endS));
-    if (curlS <= curl.startS) continue;
-    const phase = curl.phase + curl.direction * ((curlS - curl.startS) / curl.pitch) * Math.PI * 2;
-    base[0] += curl.radius * (Math.cos(phase) - Math.cos(curl.phase));
-    base[2] += curl.radius * (Math.sin(phase) - Math.sin(curl.phase));
-  }
+  const rest = restPointAt(strand, clampedS);
+  const base: [number, number, number] = [rest[0], rest[1], rest[2]];
   if (strand.earTuck) {
     const side = strand.earTuck === 'left' ? -1 : 1;
     const t = Math.max(0, Math.min(1, (clampedS - 0.035) / 0.105));
@@ -221,7 +342,7 @@ export class HairEditor {
   public exportState(): HairState { return copyState(this.state); }
   public exportHistory(): EditorHistory {
     return {
-      version: 1,
+      version: 2,
       current: this.exportState(),
       undo: this.undoStack.map(copyState),
       redo: this.redoStack.map(copyState),
@@ -392,9 +513,10 @@ export class HairEditor {
       (curl.direction !== -1 && curl.direction !== 1)) {
       return { changed: false, reason: 'Invalid curl', strandId };
     }
-    const limited = { ...curl, endS: Math.min(curl.endS, strand.length) };
-    if (limited.startS >= limited.endS) return { changed: false, reason: 'Curl range is outside current strand', strandId };
-    const constraint = assessActionIntent(this.state, { type: 'curl', strandId, startS: limited.startS, endS: limited.endS });
+    const visibleEndS = Math.min(curl.endS, strand.length);
+    if (curl.startS >= visibleEndS) return { changed: false, reason: 'Curl range is outside current strand', strandId };
+    const limited = { ...curl, endS: visibleEndS >= strand.length - 1e-9 ? strand.maximumLength : visibleEndS };
+    const constraint = assessActionIntent(this.state, { type: 'curl', strandId, startS: limited.startS, endS: visibleEndS });
     if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
     this.saveUndo();
     this.state = replaceStrand(this.state, { ...strand, curls: [limited] });
@@ -413,11 +535,7 @@ export class HairEditor {
       return { changed: false, reason: constraint.message, strandId };
     }
     this.saveUndo();
-    const lastCurl = strand.curls.at(-1);
-    const curls = lastCurl && length > lastCurl.endS && lastCurl.endS >= strand.length
-      ? [...strand.curls.slice(0, -1), { ...lastCurl, endS: length }]
-      : strand.curls;
-    this.state = replaceStrand(this.state, { ...strand, length, curls });
+    this.state = replaceStrand(this.state, { ...strand, length });
     return { changed: true, strandId, oldLength: strand.length, newLength: length };
   }
 
@@ -447,7 +565,7 @@ export function createDemoHairState(): HairState {
     A: [-0.12, 0.22, 0], B: [-0.04, 0.25, 0.04], C: [0.05, 0.25, 0.05], D: [0.13, 0.2, 0],
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     strands: Object.entries(roots).map(([id, root]) => ({
       id, root, direction: [0, -1, 0], length: id === 'C' ? 0.4 : 0.3,
       maximumLength: id === 'C' ? 0.6 : 0.45, curls: [],

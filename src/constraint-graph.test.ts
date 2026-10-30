@@ -6,7 +6,7 @@ const lowTie = { id: 'pony-low', anchor: [0, 0.02, -0.18] as const, gatherS: 0.1
 const braid = { id: 'tail-braid', axisOrigin: [0.04, 0.22, -0.02] as const, startS: 0.18, endS: 0.24, radius: 0.018, pitch: 0.055 };
 
 describe('ConstraintGraph decision contract', () => {
-  it('represents a tie and a braid as separate ordered material intervals', () => {
+  it('represents a tie and a braid as separate ordered rest-arc intervals', () => {
     const editor = new HairEditor(createDemoHairState());
     editor.tieStrands(['B', 'C', 'D'], lowTie);
     editor.braidStrands(['B', 'C', 'D'], braid);

@@ -17,6 +17,8 @@ npm run dev
 
 `npm run check` 執行核心不變條件測試、Service Worker 與 PWA shell 檢查、TypeScript production build，以及 production JS bundle 預算檢查（單一最大 bundle 上限 600 KB／gzip 150 KB）。瀏覽器開啟後可拖動旋轉，並可對 C 髮束執行「捲 C → 剪 C 到一半 → C 增長 → Undo」。這是 4 條 GuideStrand 的技術樣板，未代表全頭髮、真人資產、精確剪刀拾取或真機效能已完成。
 
+目前核心使用 schema v2：`length` 與沿束 `s` 均為以米量度的 Rest centerline material arc length。舊 v1 state／history 讀取時會明確遷移；耳後、綁紮及辮子仍屬衍生 pose constraint。詳細邊界見 [拾取與約束契約](Docs/pick-and-constraint-contract.md)。
+
 GitHub Actions 在 push 與 PR 使用 `.nvmrc` 的 Node.js 24.19.0 重跑 `npm ci` 與 `npm run check`。
 
 PWA manifest 與 service worker 已建立；暫不部署。請用 iPhone 16 Pro Max 及 iPad A16 的 Safari 作後續真機驗證，不能用桌面結果取代。

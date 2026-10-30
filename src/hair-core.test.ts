@@ -9,8 +9,8 @@ describe('HairEditor core invariants', () => {
     const after = editor.exportState();
     expect(after.strands.find((strand) => strand.id === 'A')?.length).toBe(0.15);
     for (const id of ['B', 'C', 'D']) {
-      expect(canonicalState({ schemaVersion: 1, strands: [after.strands.find((strand) => strand.id === id)!] }))
-        .toBe(canonicalState({ schemaVersion: 1, strands: [before.strands.find((strand) => strand.id === id)!] }));
+      expect(canonicalState({ schemaVersion: 2, strands: [after.strands.find((strand) => strand.id === id)!] }))
+        .toBe(canonicalState({ schemaVersion: 2, strands: [before.strands.find((strand) => strand.id === id)!] }));
     }
   });
 
@@ -277,9 +277,18 @@ describe('HairEditor core invariants', () => {
     const strand = editor.exportState().strands.find((item) => item.id === 'C')!;
     const atEnd = pointAt(strand, 0.2);
     const afterEnd = pointAt(strand, 0.2001);
-    expect(Math.abs(atEnd[0] - afterEnd[0])).toBeLessThan(1e-9);
-    expect(Math.abs(atEnd[2] - afterEnd[2])).toBeLessThan(1e-9);
-    expect(Math.abs(atEnd[1] - afterEnd[1])).toBeCloseTo(0.0001);
+    const beforeEnd = pointAt(strand, 0.1999);
+    const incoming: [number, number, number] = [
+      atEnd[0] - beforeEnd[0], atEnd[1] - beforeEnd[1], atEnd[2] - beforeEnd[2],
+    ];
+    const outgoing: [number, number, number] = [
+      afterEnd[0] - atEnd[0], afterEnd[1] - atEnd[1], afterEnd[2] - atEnd[2],
+    ];
+    const incomingLength = Math.hypot(...incoming);
+    const outgoingLength = Math.hypot(...outgoing);
+    expect(outgoingLength).toBeCloseTo(0.0001, 7);
+    expect((incoming[0] * outgoing[0] + incoming[1] * outgoing[1] + incoming[2] * outgoing[2]) / (incomingLength * outgoingLength))
+      .toBeGreaterThan(0.999);
   });
 
   it('stores and applies clockwise and counter-clockwise curl directions', () => {
@@ -293,11 +302,16 @@ describe('HairEditor core invariants', () => {
     expect(negativeStrand.curls[0].direction).toBe(-1);
     const positivePoint = pointAt(positiveStrand, 0.07);
     const negativePoint = pointAt(negativeStrand, 0.07);
-    expect(positivePoint[0]).toBeCloseTo(negativePoint[0]);
-    expect(positivePoint[2] - positiveStrand.root[2]).toBeCloseTo(-(negativePoint[2] - negativeStrand.root[2]));
+    expect(Math.hypot(
+      positivePoint[0] - negativePoint[0],
+      positivePoint[1] - negativePoint[1],
+      positivePoint[2] - negativePoint[2],
+    )).toBeGreaterThan(0.01);
+    expect(pointAt(positiveStrand, 0)).toEqual(positiveStrand.root);
+    expect(pointAt(negativeStrand, 0)).toEqual(negativeStrand.root);
   });
 
-  it('extends curl parameters continuously only after restoring the recorded tip', () => {
+  it('keeps a curl applied to the visible tip available through recorded future growth', () => {
     const editor = new HairEditor(createDemoHairState());
     editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0, direction: 1 });
     const original = editor.exportState().strands.find((item) => item.id === 'C')!;
@@ -306,7 +320,7 @@ describe('HairEditor core invariants', () => {
     editor.growBy('C', 0.25);
     const grown = editor.exportState().strands.find((item) => item.id === 'C')!;
     expect(grown.length).toBeCloseTo(0.45);
-    expect(grown.curls[0].endS).toBeCloseTo(0.45);
+    expect(grown.curls[0].endS).toBeCloseTo(grown.maximumLength);
     const justAfterFormerTip = pointAt(grown, 0.4001);
     const atFormerTip = pointAt(grown, 0.4);
     expect(Math.hypot(justAfterFormerTip[0] - atFormerTip[0], justAfterFormerTip[2] - atFormerTip[2])).toBeGreaterThan(0);

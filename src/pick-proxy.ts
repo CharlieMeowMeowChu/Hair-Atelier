@@ -168,7 +168,7 @@ function compareHits(left: PickHit, right: PickHit): number {
 
 /**
  * Selects the front-most visible GuideStrand capsule. The deterministic ordering
- * is depth, screen-space proxy distance, stable strand ID, then material s.
+ * is depth, screen-space proxy distance, stable strand ID, then rest arc s.
  */
 export function pickVisibleSegment(
   ray: PickRay,

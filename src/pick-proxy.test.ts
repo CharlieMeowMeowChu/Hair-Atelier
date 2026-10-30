@@ -5,7 +5,7 @@ const ray: PickRay = { origin: [0, 0, 1], direction: [0, 0, -1] };
 const preciseTouch = { touchRadiusMetersAtDepth: () => 0.001 };
 
 describe('GuideStrand pick proxy', () => {
-  it('interpolates material s from the closest point on a segment', () => {
+  it('interpolates rest arc s from the closest point on a segment', () => {
     const segment: PickSegment = { strandId: 'C', s0: 0.1, s1: 0.3, a: [-1, 0, 0], b: [1, 0, 0] };
     const hit = pickVisibleSegment(ray, [segment], preciseTouch);
     expect(hit?.materialS).toBeCloseTo(0.2, 8);

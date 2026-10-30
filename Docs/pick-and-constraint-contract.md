@@ -6,9 +6,9 @@
 
 ## 1. 現行座標誠實定義
 
-現行 schema v1 的 `length`／`s` 是**材料參數（material s）**：Cut、Curl、Grow、存讀及歷史都以同一個 `s` 工作，故已能保證剪後保留同一段既有幾何；但當捲曲、耳後、綁紮或辮子改變曲線時，尚未以數值證明它等於整條 Rest centerline 的真實弧長。
+現行 schema v2 的 `length`／`s` 是**以米量度的 Rest centerline material arc length**。`ArcLengthSampler` 用 unit-speed line／helix segment 評估 Rest curve，故沿 `s` 的 Cut、Curl、Grow、存讀及歷史共用同一物理材料座標；局部 curl 的前後段保持位置及切線連續。耳後、綁紮及辮子屬 pose constraint，不會重新定義 Rest `s` 或已儲存的 Rest length。
 
-因此，現有畫面把 overlay 改稱 `Material s`，不把它誤報為正式的 `totalArcLengthMeters`。在正式 Gate 2 前，W04 必須把 schema 演進為可量度的 Rest curve／arc-length lookup；舊存檔要有明確 migration，不能把原本 v1 參數靜默當成真實弧長。
+畫面 overlay 因此標示 `Rest arc s`。舊 schema v1 state 及完整 undo/redo history 會由舊幾何高解析採樣後遷移到 v2；不會把原本 v1 參數靜默當成真實弧長。這項核心測試不等同裝置驗收：指定 Safari 真機與完整髮量仍未測試。
 
 這不是降低規格：總規格要求的真實弧長、0.5 mm CurlLock 與世界米誤差仍維持為 Gate 2 條件。
 
@@ -20,14 +20,14 @@
 { strandId, s0, s1, a, b, radiusMeters }
 ```
 
-它計算 ray 對有限 capsule 中心線的最近點，按比例回傳 `materialS = lerp(s0, s1, segmentT)`。這取代目前樣板用 `Line.raycast().index` 直接取樣點的近似，避免切口只落在 40 段取樣點。
+它計算 ray 對有限 capsule 中心線的最近點，按比例回傳 `materialS = lerp(s0, s1, segmentT)`；現有欄位名稱沿用，但它代表 v2 的 Rest arc `s`。這取代目前樣板用 `Line.raycast().index` 直接取樣點的近似，避免切口只落在 40 段取樣點。
 
 決定性選擇順序如下：
 
 1. 最前的 capsule 表面深度；
 2. 觸控容差內的最短距離；
 3. stable `strandId`；
-4. 較小 `materialS`。
+4. 較小的 Rest arc `s`（欄位名 `materialS`）。
 
 頭皮／耳朵可作低成本 sphere/capsule occluder；遮擋物在候選髮束可見表面之前即拒絕。之後整合到 Three.js 時，pointer ray 先轉回 `headRig` local-space，旋轉頭部只改 ray，毋須重建整個索引。變更某髮束才重建其 PickSegment；4–20 條 GuideStrand 可線性查詢，密集髮量才加入 uniform grid/BVH。
 
@@ -41,7 +41,7 @@
 
 ## 3. ConstraintGraph：B6 的非破壞決策階段
 
-`src/constraint-graph.ts` 先從 schema v1 的 `earTuck`、`tie`、`braid` 推導臨時 `ConstraintInterval`。每個 interval 有 `strandId`、`[startS,endS]`、type、owner ID 和 priority，並透過：
+`src/constraint-graph.ts` 先從目前 schema v2 prototype 的 `earTuck`、`tie`、`braid` 推導臨時 `ConstraintInterval`。每個 interval 有 `strandId`、`[startS,endS]`、type、owner ID 和 priority，並透過：
 
 ```text
 ActionIntent → ConstraintGraph → Allowed | Partial | RequiresConfirmation | Rejected
@@ -72,7 +72,7 @@ ActionIntent → ConstraintGraph → Allowed | Partial | RequiresConfirmation | 
 
 ## 4. 後續 schema 與 Gate 邊界
 
-正式 B7 仍要求 schema 演進至 `StrandGroup`、頭部 local-space `Anchor`、持久 `ConstraintInterval`、`BraidGroup` 與 `ConstraintSolver`。schema v1 每束只有一個 `tie` 和一個 `braid`，足以做現行契約測試，**不足以**支援兩個依次髮圈、完整拆辮／局部脫離、或全量頭髮。
+正式 B7 仍要求 schema 演進至 `StrandGroup`、頭部 local-space `Anchor`、持久 `ConstraintInterval`、`BraidGroup` 與 `ConstraintSolver`。目前 schema v2 prototype 每束只有一個 `tie` 和一個 `braid`，足以做現行契約測試，**不足以**支援兩個依次髮圈、完整拆辮／局部脫離、或全量頭髮。
 
 在 Gate 2 的兩部指定 Safari 真機資料未齊前：
 

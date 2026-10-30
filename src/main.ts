@@ -22,25 +22,37 @@ const metrics = {
   render: document.querySelector<HTMLElement>('#metric-render'),
 };
 
-const storageKey = 'hair-atelier.editor-history.v1';
+const storageKey = 'hair-atelier.editor-history.v2';
+const legacyHistoryStorageKey = 'hair-atelier.editor-history.v1';
 const legacyStorageKey = 'hair-atelier.hair-state.v1';
+function persistEditorHistory(candidate: HairEditor): boolean {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(candidate.exportHistory()));
+    return true;
+  } catch {
+    return false;
+  }
+}
 function loadPersistedEditor(): HairEditor | undefined {
   try {
-    const history = parseEditorHistory(localStorage.getItem(storageKey) ?? '');
-    if (history) return new HairEditor(history.current, history);
+    for (const key of [storageKey, legacyHistoryStorageKey]) {
+      const history = parseEditorHistory(localStorage.getItem(key) ?? '');
+      if (!history) continue;
+      const restored = new HairEditor(history.current, history);
+      if (key !== storageKey) persistEditorHistory(restored);
+      return restored;
+    }
     const legacyState = parseHairState(localStorage.getItem(legacyStorageKey) ?? '');
-    return legacyState ? new HairEditor(legacyState) : undefined;
+    if (!legacyState) return undefined;
+    const restored = new HairEditor(legacyState);
+    persistEditorHistory(restored);
+    return restored;
   } catch {
     return undefined;
   }
 }
 function persistState(): boolean {
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(editor.exportHistory()));
-    return true;
-  } catch {
-    return false;
-  }
+  return persistEditorHistory(editor);
 }
 let editor = loadPersistedEditor() ?? new HairEditor(createDemoHairState());
 const scene = new Scene();

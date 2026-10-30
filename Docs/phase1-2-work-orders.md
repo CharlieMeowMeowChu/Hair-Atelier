@@ -14,7 +14,7 @@
 | P2-05 / W08 | 可序列化指令、20 步持久 Undo/Redo、Save/Load | HAIR-006/007；hash 及可見幾何一致，重啟後歷史可用 |
 | P2-06 | 核心組合驗證及指定 Safari 初測 | 捲→剪→增→Undo/Redo→存→重啟→讀；影片、真機 OS/版本/commit/p95/memory |
 
-Gate 2 全數通過才開始全量頭髮美術。4–20 條成功不能宣稱全頭髮量效能成功。W09 完整拾取、W16 完整選區及 W19 完整衝突處理仍保留原階段；早期只定義工具需要的資料介面，不跳過後續驗收。現行 schema v1 的 `s` 暫為 material parameter；W04 的正式真實弧長 lookup、schema migration 與 Gate 2 證據仍未完成，詳見 `pick-and-constraint-contract.md`。
+Gate 2 全數通過才開始全量頭髮美術。4–20 條成功不能宣稱全頭髮量效能成功。W09 完整拾取、W16 完整選區及 W19 完整衝突處理仍保留原階段；早期只定義工具需要的資料介面，不跳過後續驗收。現行 schema v2 的 `length`／`s` 均為以米量度的 Rest centerline material arc length；`ArcLengthSampler` 與 v1 state/history migration 屬 W04 核心實作。Gate 2 的指定 Safari 真機證據仍未完成，詳見 `pick-and-constraint-contract.md`。
 
 ## 裝置及操作計劃
 

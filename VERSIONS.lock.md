@@ -10,7 +10,7 @@
 | TypeScript | package-lock.json | production typecheck／build PASS |
 | Three.js | package-lock.json | Three.js WebGL 技術樣板已使用 |
 | Vite | package-lock.json | production build PASS |
-| Vitest | package-lock.json | 30 項 core／手勢／效能 tests PASS |
+| Vitest | package-lock.json | 50 項 core／手勢／效能／Rest arc tests PASS |
 | Safari iPhone 16 Pro Max／iPad A16 | 待真機實測 | 未測，不能由桌面代替 |
 
 ## 已淘汰路徑的歷史紀錄
