@@ -1,3 +1,5 @@
+import { assessActionIntent } from './constraint-graph';
+
 export type Vec3 = readonly [number, number, number];
 
 export interface CurlSegment {
@@ -233,6 +235,8 @@ export class HairEditor {
     if (!strand || !Number.isFinite(arcLengthMeters)) return { changed: false, reason: 'Invalid target', strandId };
     const length = Math.max(minimumStubble, Math.min(arcLengthMeters, strand.length));
     if (length >= strand.length) return { changed: false, reason: 'No downstream geometry selected', strandId };
+    const constraint = assessActionIntent(this.state, { type: 'cut', strandId, atS: length });
+    if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
     this.saveUndo();
     this.state = replaceStrand(this.state, { ...strand, length });
     return { changed: true, strandId, oldLength: strand.length, newLength: length };
@@ -255,6 +259,8 @@ export class HairEditor {
       if (requested === undefined) continue;
       const length = Math.max(minimumStubble, Math.min(requested, strand.length));
       if (length >= strand.length) continue;
+      const constraint = assessActionIntent(this.state, { type: 'cut', strandId: strand.id, atS: length });
+      if (constraint.decision !== 'Allowed') continue;
       nextState = replaceStrand(nextState, { ...strand, length });
       results.push({ changed: true, strandId: strand.id, oldLength: strand.length, newLength: length });
     }
@@ -272,6 +278,8 @@ export class HairEditor {
   public combBy(strandId: string, lateralDelta: Vec3): EditResult {
     const strand = this.state.strands.find((candidate) => candidate.id === strandId);
     if (!strand || !lateralDelta.every(Number.isFinite)) return { changed: false, reason: 'Invalid comb target', strandId };
+    const constraint = assessActionIntent(this.state, { type: 'comb', strandId, startS: 0, endS: strand.length });
+    if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
     const direction: Vec3 = [
       Math.max(-0.75, Math.min(0.75, strand.direction[0] + lateralDelta[0])),
       strand.direction[1],
@@ -305,10 +313,17 @@ export class HairEditor {
   public sweepToSide(side: 'left' | 'right'): readonly EditResult[] {
     if (side !== 'left' && side !== 'right') return [];
     const offset: Vec3 = [side === 'left' ? -0.38 : 0.38, 0, 0];
-    const affected = this.state.strands.filter((strand) => strand.sideSweepOffset?.[0] !== offset[0]);
+    const affected = this.state.strands.filter((strand) => {
+      if (strand.sideSweepOffset?.[0] === offset[0]) return false;
+      return assessActionIntent(this.state, { type: 'comb', strandId: strand.id, startS: 0, endS: strand.length }).decision === 'Allowed';
+    });
     if (affected.length === 0) return [];
+    const affectedIds = new Set(affected.map((strand) => strand.id));
     this.saveUndo();
-    this.state = { ...this.state, strands: this.state.strands.map((strand) => ({ ...strand, sideSweepOffset: offset })) };
+    this.state = {
+      ...this.state,
+      strands: this.state.strands.map((strand) => affectedIds.has(strand.id) ? { ...strand, sideSweepOffset: offset } : strand),
+    };
     return affected.map((strand) => ({ changed: true, strandId: strand.id, oldLength: strand.length, newLength: strand.length }));
   }
 
@@ -330,8 +345,12 @@ export class HairEditor {
     for (const group of groups) {
       const { tie } = group;
       if (!tie.id || !tie.anchor.every(Number.isFinite) || !Number.isFinite(tie.gatherS) || tie.gatherS <= 0) return [];
-      group.strandIds.forEach((strandId) => assignment.set(strandId, tie));
+      for (const strandId of group.strandIds) {
+        if (assignment.has(strandId)) return [];
+        assignment.set(strandId, tie);
+      }
     }
+    if (groups.some((group) => assessActionIntent(this.state, { type: 'tie', strandIds: group.strandIds, tie: group.tie }).decision !== 'Allowed')) return [];
     const eligible = this.state.strands.filter((strand) => {
       const tie = assignment.get(strand.id);
       return tie && strand.length > tie.gatherS && strand.tie?.id !== tie.id;
@@ -351,6 +370,7 @@ export class HairEditor {
   public braidStrands(strandIds: readonly [string, string, string], braid: Omit<BraidConstraint, 'index'>): readonly EditResult[] {
     if (!braid.id || !braid.axisOrigin.every(Number.isFinite) || !Number.isFinite(braid.startS) || !Number.isFinite(braid.endS) ||
       braid.endS <= braid.startS || !Number.isFinite(braid.radius) || braid.radius <= 0 || !Number.isFinite(braid.pitch) || braid.pitch <= 0) return [];
+    if (assessActionIntent(this.state, { type: 'braid', strandIds, braid }).decision !== 'Allowed') return [];
     const eligible = strandIds.map((id) => this.state.strands.find((strand) => strand.id === id)).filter((strand): strand is GuideStrand =>
       Boolean(strand) && strand!.length > braid.endS && strand!.braid?.id !== braid.id);
     if (eligible.length !== 3) return [];
@@ -374,6 +394,8 @@ export class HairEditor {
     }
     const limited = { ...curl, endS: Math.min(curl.endS, strand.length) };
     if (limited.startS >= limited.endS) return { changed: false, reason: 'Curl range is outside current strand', strandId };
+    const constraint = assessActionIntent(this.state, { type: 'curl', strandId, startS: limited.startS, endS: limited.endS });
+    if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
     this.saveUndo();
     this.state = replaceStrand(this.state, { ...strand, curls: [limited] });
     return { changed: true, strandId, oldLength: strand.length, newLength: strand.length };
@@ -386,6 +408,10 @@ export class HairEditor {
     }
     const length = Math.min(strand.maximumLength, strand.length + deltaArcLengthMeters);
     if (length === strand.length) return { changed: false, reason: 'At maximum recorded length', strandId };
+    const constraint = assessActionIntent(this.state, { type: 'grow', strandId, deltaS: deltaArcLengthMeters });
+    if (constraint.decision === 'Rejected' || constraint.decision === 'RequiresConfirmation') {
+      return { changed: false, reason: constraint.message, strandId };
+    }
     this.saveUndo();
     const lastCurl = strand.curls.at(-1);
     const curls = lastCurl && length > lastCurl.endS && lastCurl.endS >= strand.length

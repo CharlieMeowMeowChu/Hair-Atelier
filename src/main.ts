@@ -5,6 +5,7 @@ import {
 } from 'three';
 import './style.css';
 import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, sampleStrand } from './hair-core';
+import { assessActionIntent } from './constraint-graph';
 import { hasExceededDragThreshold } from './input-gesture';
 import { RecentMeasurements } from './performance-metrics';
 
@@ -303,6 +304,12 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
       ? { id: 'pony-high', anchor: [0, 0.17, -0.16] as Vector3Tuple, gatherS: 0.14 }
       : { id: 'pony-low', anchor: [0, 0.02, -0.18] as Vector3Tuple, gatherS: 0.16 };
     const targetIds = selectedStrandIds.size > 0 ? [...selectedStrandIds] : editor.exportState().strands.map((strand) => strand.id);
+    const assessment = assessActionIntent(editor.exportState(), { type: 'tie', strandIds: targetIds, tie });
+    if (assessment.decision !== 'Allowed') {
+      appStatus.textContent = assessment.message;
+      requestRender();
+      return;
+    }
     const results = editor.tieStrands(targetIds, {
       ...tie,
     });
@@ -310,7 +317,15 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     redraw();
     appStatus.textContent = results.length > 0 ? `已將 ${results.length} 束髮綁成${height === 'high' ? '高' : '低'}馬尾` : '髮束已綁定或長度不足';
   } else if (tool === 'halfup' && hit) {
-    const results = editor.tieStrands(selectedStrandIds.size > 0 ? [...selectedStrandIds] : ['B', 'C'], { id: 'half-up', anchor: [0, 0.12, -0.15], gatherS: 0.13 });
+    const targetIds = selectedStrandIds.size > 0 ? [...selectedStrandIds] : ['B', 'C'];
+    const tie = { id: 'half-up', anchor: [0, 0.12, -0.15] as Vector3Tuple, gatherS: 0.13 };
+    const assessment = assessActionIntent(editor.exportState(), { type: 'tie', strandIds: targetIds, tie });
+    if (assessment.decision !== 'Allowed') {
+      appStatus.textContent = assessment.message;
+      requestRender();
+      return;
+    }
+    const results = editor.tieStrands(targetIds, tie);
     if (results.length > 0) persistState();
     redraw();
     appStatus.textContent = results.length > 0 ? '已將上半部髮束綁成公主頭' : '上半部髮束已綁定或長度不足';
@@ -328,10 +343,18 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     const leftIds = selected.slice(0, splitAt).map((strand) => strand.id);
     const rightIds = selected.slice(splitAt).map((strand) => strand.id);
     const anchor: Vector3Tuple = [0, 0.04, -0.18];
-    const results = editor.tieGroups([
+    const groups = [
       { strandIds: leftIds, tie: { id: 'pair-left', anchor, gatherS: 0.15 } },
       { strandIds: rightIds, tie: { id: 'pair-right', anchor, gatherS: 0.15 } },
-    ]);
+    ];
+    const assessment = groups.map((group) => assessActionIntent(editor.exportState(), { type: 'tie' as const, ...group }))
+      .find((result) => result.decision !== 'Allowed');
+    if (assessment) {
+      appStatus.textContent = assessment.message;
+      requestRender();
+      return;
+    }
+    const results = editor.tieGroups(groups);
     if (results.length > 0) persistState();
     redraw();
     appStatus.textContent = results.length > 0
@@ -339,9 +362,22 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
       : '髮束已綁定或長度不足';
   } else if (tool === 'braid' && hit) {
     const selected = selectedStrandIds.size === 3 ? [...selectedStrandIds] as [string, string, string] : ['B', 'C', 'D'] as [string, string, string];
-    const results = editor.braidStrands(selected, {
-      id: 'braid-demo', axisOrigin: [0.04, 0.22, -0.02], startS: 0.04, endS: 0.24, radius: 0.018, pitch: 0.055,
-    });
+    const selectedStrands = selected.map((id) => editor.exportState().strands.find((strand) => strand.id === id));
+    const sharedTie = selectedStrands[0]?.tie && selectedStrands.every((strand) => strand?.tie?.id === selectedStrands[0]?.tie?.id)
+      ? selectedStrands[0].tie
+      : undefined;
+    const startS = Math.max(0.04, (sharedTie?.gatherS ?? 0.02) + 0.02);
+    const endS = Math.min(0.24, ...selectedStrands.map((strand) => strand?.length ?? 0));
+    const braid = {
+      id: 'braid-demo', axisOrigin: sharedTie?.anchor ?? [0.04, 0.22, -0.02], startS, endS, radius: 0.018, pitch: 0.055,
+    } as const;
+    const assessment = assessActionIntent(editor.exportState(), { type: 'braid', strandIds: selected, braid });
+    if (assessment.decision !== 'Allowed') {
+      appStatus.textContent = assessment.message;
+      requestRender();
+      return;
+    }
+    const results = editor.braidStrands(selected, braid);
     if (results.length > 0) persistState();
     redraw();
     appStatus.textContent = results.length > 0 ? `已以 ${selected.join('、')} 建立三股辮路徑` : '需要三束未編髮或髮束長度不足';
@@ -419,17 +455,27 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
   highlightHair();
   if (cancelled) return;
   if (tool === 'cut' && gesture.cuts.size > 0) {
-    const results = editor.cutManyAt([...gesture.cuts].map(([strandId, arcLengthMeters]) => ({ strandId, arcLengthMeters })));
+    const targets = [...gesture.cuts].map(([strandId, arcLengthMeters]) => ({ strandId, arcLengthMeters }));
+    const blocked = targets.map((target) => assessActionIntent(editor.exportState(), { type: 'cut', strandId: target.strandId, atS: target.arcLengthMeters }))
+      .find((assessment) => assessment.decision !== 'Allowed');
+    const results = editor.cutManyAt(targets);
     if (results.length > 0) persistState();
     redraw();
-    appStatus.textContent = results.length > 0 ? `一次剪短 ${results.map((result) => result.strandId).join('、')} 共 ${results.length} 束` : '剪刀未切到可移除的髮尾';
+    appStatus.textContent = results.length > 0
+      ? `一次剪短 ${results.map((result) => result.strandId).join('、')} 共 ${results.length} 束${blocked ? '；部分髮束未剪：' + blocked.message : ''}`
+      : blocked?.message ?? '剪刀未切到可移除的髮尾';
   }
   if (tool === 'clip' && gesture.clippedIds.size > 0) {
     const guard = Number(document.querySelector<HTMLInputElement>('#clipper-length')?.value ?? 6) / 100;
-    const results = editor.clipManyAt([...gesture.clippedIds], guard);
+    const targetIds = [...gesture.clippedIds];
+    const blocked = targetIds.map((strandId) => assessActionIntent(editor.exportState(), { type: 'cut', strandId, atS: guard }))
+      .find((assessment) => assessment.decision !== 'Allowed');
+    const results = editor.clipManyAt(targetIds, guard);
     if (results.length > 0) persistState();
     redraw();
-    appStatus.textContent = results.length > 0 ? `電剪修短 ${results.map((result) => result.strandId).join('、')} 至 ${Math.round(guard * 100)} cm` : '命中髮束已短於設定留髮長度';
+    appStatus.textContent = results.length > 0
+      ? `電剪修短 ${results.map((result) => result.strandId).join('、')} 至 ${Math.round(guard * 100)} cm${blocked ? '；部分髮束未剪：' + blocked.message : ''}`
+      : blocked?.message ?? '命中髮束已短於設定留髮長度';
   }
   if (tool === 'curl' && gesture.hit && gesture.hasDragged) {
     const strand = editor.exportState().strands.find((item) => item.id === gesture.hit?.id);
@@ -439,7 +485,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     const result = editor.curlRange(strand.id, { startS, endS: strand.length, radius: 0.025, pitch: 0.08, phase: 0.3, direction });
     if (result.changed) persistState();
     redraw();
-    appStatus.textContent = result.changed ? `已捲曲 ${strand.id} 的 ${Math.round(startS * 100)} cm 至髮尾` : '未能建立捲曲';
+    appStatus.textContent = result.changed ? `已捲曲 ${strand.id} 的 ${Math.round(startS * 100)} cm 至髮尾` : result.reason ?? '未能建立捲曲';
   }
   if (tool === 'comb' && gesture.hit && gesture.combStart) {
     const result = editor.combBy(gesture.hit.id, [
@@ -449,7 +495,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     ]);
     if (result.changed) persistState();
     redraw();
-    appStatus.textContent = result.changed ? `已向指定方向撥動 ${gesture.hit.id}` : '梳子未產生有效位移';
+    appStatus.textContent = result.changed ? `已向指定方向撥動 ${gesture.hit.id}` : result.reason ?? '梳子未產生有效位移';
   }
   if (tool === 'part' && gesture.combStart && gesture.hasDragged) {
     const rect = renderer.domElement.getBoundingClientRect();

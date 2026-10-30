@@ -135,12 +135,12 @@ describe('HairEditor core invariants', () => {
     afterDelta.forEach((value, index) => expect(value).toBeCloseTo(beforeDelta[index]));
   });
 
-  it('allows a tied group to move predictably between low and high anchors', () => {
+  it('rejects a competing hair band instead of silently replacing the original tie', () => {
     const editor = new HairEditor(createDemoHairState());
     editor.tieStrands(['A', 'B', 'C', 'D'], { id: 'pony-low', anchor: [0, 0.02, -0.18], gatherS: 0.16 });
     const high = editor.tieStrands(['A', 'B', 'C', 'D'], { id: 'pony-high', anchor: [0, 0.17, -0.16], gatherS: 0.14 });
-    expect(high).toHaveLength(4);
-    expect(editor.exportState().strands.every((strand) => strand.tie?.id === 'pony-high')).toBe(true);
+    expect(high).toHaveLength(0);
+    expect(editor.exportState().strands.every((strand) => strand.tie?.id === 'pony-low')).toBe(true);
   });
 
   it('keeps lower strands free when only the upper group is tied', () => {
@@ -169,6 +169,16 @@ describe('HairEditor core invariants', () => {
     expect(editor.exportState().strands.every((strand) => strand.tie === undefined)).toBe(true);
   });
 
+  it('rejects duplicate strand assignments instead of letting the last tie silently win', () => {
+    const editor = new HairEditor(createDemoHairState());
+    const anchor: [number, number, number] = [0, 0.04, -0.18];
+    expect(editor.tieGroups([
+      { strandIds: ['A', 'B'], tie: { id: 'left', anchor, gatherS: 0.15 } },
+      { strandIds: ['B', 'C'], tie: { id: 'right', anchor, gatherS: 0.15 } },
+    ])).toEqual([]);
+    expect(editor.exportState().strands.every((strand) => strand.tie === undefined)).toBe(true);
+  });
+
   it('creates three distinct procedural braid paths while keeping roots fixed', () => {
     const editor = new HairEditor(createDemoHairState());
     const before = editor.exportState();
@@ -181,7 +191,9 @@ describe('HairEditor core invariants', () => {
     expect(paths[0]).not.toEqual(paths[1]);
     expect(paths[1]).not.toEqual(paths[2]);
     expect(pointAt(after.strands.find((strand) => strand.id === 'B')!, 0)).toEqual(before.strands.find((strand) => strand.id === 'B')!.root);
-    editor.cutAt('C', 0.2);
+    const cut = editor.cutAt('C', 0.2);
+    expect(cut.changed).toBe(false);
+    expect(cut.reason).toContain('拆開辮子');
     expect(editor.exportState().strands.find((strand) => strand.id === 'C')?.braid?.id).toBe('braid-demo');
   });
 
@@ -195,6 +207,25 @@ describe('HairEditor core invariants', () => {
     expect(after.strands.every((strand) => strand.sideSweepOffset?.[0] === -0.38)).toBe(true);
     expect(after.strands.find((strand) => strand.id === 'C')?.direction).toEqual(before.strands.find((strand) => strand.id === 'C')?.direction);
     expect(after.strands.map((strand) => pointAt(strand, 0))).toEqual(before.strands.map((strand) => strand.root));
+  });
+
+  it('leaves a tied strand unchanged when side sweeping its free neighbours', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.tieStrands(['A'], { id: 'pony-low', anchor: [0, 0.02, -0.18], gatherS: 0.16 });
+    const results = editor.sweepToSide('right');
+    const state = editor.exportState();
+    expect(results.map((result) => result.strandId)).toEqual(['B', 'C', 'D']);
+    expect(state.strands.find((strand) => strand.id === 'A')?.sideSweepOffset).toBeUndefined();
+    expect(state.strands.filter((strand) => strand.id !== 'A').every((strand) => strand.sideSweepOffset?.[0] === 0.38)).toBe(true);
+  });
+
+  it('cuts a ponytail free tail while keeping its hair band intact', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.tieStrands(['A'], { id: 'pony-low', anchor: [0, 0.02, -0.18], gatherS: 0.16 });
+    expect(editor.cutAt('A', 0.22).changed).toBe(true);
+    const strand = editor.exportState().strands.find((item) => item.id === 'A')!;
+    expect(strand.length).toBe(0.22);
+    expect(strand.tie?.id).toBe('pony-low');
   });
 
   it('never grows while repeatedly cutting and treats the same cut as a no-op', () => {
