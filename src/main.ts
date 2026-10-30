@@ -264,6 +264,15 @@ function pinchDistance(): number | undefined {
 }
 renderer.domElement.addEventListener('pointerdown', (event) => {
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (activePointers.size > 1 && tool !== 'rotate') {
+    pointer = undefined;
+    cursor.visible = false;
+    scissorsCursor.visible = false;
+    previewCutS = undefined;
+    updateOverlay();
+    requestRender();
+    return;
+  }
   const hit = hitHair(event.clientX, event.clientY);
   const cuts = new Map<string, number>();
   const clippedIds = new Set<string>();
