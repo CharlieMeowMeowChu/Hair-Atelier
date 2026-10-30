@@ -8,7 +8,7 @@ h1 { margin: 0; font-size: clamp(1.65rem, 6vw, 2.35rem); letter-spacing: -.04em;
 #status { min-height: 1.2em; margin: 9px 0 0; color: #d5cadc; font-size: .88rem; }
 #stage { flex: 1; min-height: 360px; overflow: hidden; border: 1px solid #493f51; border-radius: 24px; touch-action: none; box-shadow: 0 18px 50px #0008; }
 #stage canvas { display: block; width: 100%; height: 100%; }
-#overlay { margin: -58px 10px 0; padding: 9px 10px; z-index: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; border: 1px solid #ffffff24; border-radius: 12px; background: #17141fd9; backdrop-filter: blur(8px); pointer-events: none; }
+#overlay { margin: -86px 10px 0; padding: 9px 10px; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; border: 1px solid #ffffff24; border-radius: 12px; background: #17141fd9; backdrop-filter: blur(8px); pointer-events: none; }
 #overlay div { min-width: 0; }
 #overlay dt { color: #aa9caf; font-size: .55rem; text-transform: uppercase; letter-spacing: .05em; }
 #overlay dd { margin: 3px 0 0; overflow: hidden; color: #f8edf8; font: 600 .65rem ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
@@ -24,5 +24,4 @@ button:active { transform: scale(.98); }
 button.secondary { color: #f7ecf5; background: #3d3442; }
 button.active { outline: 3px solid #85d8ff; outline-offset: 1px; background: #e3f6ff; }
 .hint { margin: 0 4px; color: #b9adbd; font-size: .78rem; line-height: 1.45; }
-@media (min-width: 700px) { main { min-height: 760px; padding-top: 36px; } .tools { grid-template-columns: repeat(4, 1fr); } .controls { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 430px) { #overlay { grid-template-columns: repeat(3, 1fr); margin-top: -86px; } }
+@media (min-width: 700px) { main { min-height: 760px; padding-top: 36px; } .tools { grid-template-columns: repeat(4, 1fr); } .controls { grid-template-columns: repeat(3, 1fr); } #overlay { grid-template-columns: repeat(6, minmax(0, 1fr)); margin-top: -58px; } }
