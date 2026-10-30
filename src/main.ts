@@ -5,6 +5,7 @@ import {
 } from 'three';
 import './style.css';
 import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, sampleStrand } from './hair-core';
+import { hasExceededDragThreshold } from './input-gesture';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -341,7 +342,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   if (activePointers.has(event.pointerId)) activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (!pointer) return;
   if (tool === 'cut') {
-    if (!pointer.hasDragged && Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) < 6) return;
+    if (!pointer.hasDragged && !hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) return;
     pointer.hasDragged = true;
     const hits = sweepHits(pointer.x, pointer.y, event.clientX, event.clientY);
     for (const hit of hits) pointer.cuts.set(hit.id, Math.min(pointer.cuts.get(hit.id) ?? hit.s, hit.s));
@@ -356,7 +357,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
     return;
   }
   if (tool === 'clip') {
-    if (!pointer.hasDragged && Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) < 6) return;
+    if (!pointer.hasDragged && !hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) return;
     pointer.hasDragged = true;
     const hits = sweepHits(pointer.x, pointer.y, event.clientX, event.clientY);
     hits.forEach((hit) => pointer?.clippedIds.add(hit.id));
@@ -367,11 +368,11 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   }
   if (tool === 'comb') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool === 'part') {
-    if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) >= 6) pointer.hasDragged = true;
+    if (hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) pointer.hasDragged = true;
     return;
   }
   if (tool === 'curl') {
-    if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) >= 6) pointer.hasDragged = true;
+    if (hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) pointer.hasDragged = true;
     showCursor(hitHair(event.clientX, event.clientY));
     return;
   }
