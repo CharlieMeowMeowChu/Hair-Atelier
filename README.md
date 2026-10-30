@@ -20,7 +20,7 @@ npm run dev
 
 目前核心使用 schema v2：`length` 與沿束 `s` 均為以米量度的 Rest centerline material arc length。存檔主體使用 IndexedDB；舊 localStorage v1／v2 state／history 讀取時會明確遷移但不刪除。耳後、綁紮及辮子仍屬衍生 pose constraint。詳細邊界見 [拾取與約束契約](Docs/pick-and-constraint-contract.md)。
 
-GitHub Actions 在 push 與 PR 使用 `.nvmrc` 的 Node.js 24.19.0 重跑 `npm ci` 與 `npm run check`。
+GitHub Actions 在 PR 與合併至 `main` 後使用 `.nvmrc` 的 Node.js 24.19.0 重跑 `npm ci` 與 `npm run check`；feature branch 已有 PR 時不重複觸發同一份 push workflow。
 
 `npm run check:browser` 只在已安裝 Chromium 的開發環境執行，會以 DevTools Protocol 檢查 canvas、overlay 及 page error；它不取代 Safari 真機驗收，因此不放入 GitHub Actions。
 
