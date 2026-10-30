@@ -154,11 +154,26 @@ try {
   await delay(100);
   const afterRotate = await screenshot(client);
   parsed.rotateVisualChanged = beforeRotate !== afterRotate;
+  const indexedHistory = await evaluate(client, `new Promise((resolve) => {
+    document.querySelector('#save')?.click();
+    setTimeout(() => {
+      const request = indexedDB.open('hair-atelier', 1);
+      request.onerror = () => resolve(undefined);
+      request.onsuccess = () => {
+        const read = request.result.transaction('editor-history', 'readonly').objectStore('editor-history').get('current-v2');
+        read.onerror = () => resolve(undefined);
+        read.onsuccess = () => resolve(read.result);
+      };
+    }, 100);
+  })`);
+  parsed.indexedDbHistoryValid = (() => {
+    try { return JSON.parse(indexedHistory).version === 2; } catch { return false; }
+  })();
   parsed.consoleErrors = consoleErrors;
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.rotateVisualChanged || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.rotateVisualChanged || !parsed.indexedDbHistoryValid || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, rotateVisualChanged=${parsed.rotateVisualChanged}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, rotateVisualChanged=${parsed.rotateVisualChanged}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, status=${parsed.status}`);
 } finally {
   client?.close();
   await stop(chrome);

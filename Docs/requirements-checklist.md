@@ -20,7 +20,7 @@
 | F14 三股辮 | HAIR-014/015/021/023/029/030 | 程序化路徑原型；Phase 8／Gate 8 未驗收 |
 | F15 側撥 | Gate 6；肩頸碰撞及局部操作 | 導引髮束原型；Gate 6 未驗收 |
 | F16 持久 Undo/Redo | HAIR-006/029，重啟後最少 20 步 | 最多 20 步 history 存檔已自動測試；Safari 重開未驗收 |
-| F17 存讀 | HAIR-007/017/029/033 | versioned localStorage 原型及資料驗證；Safari 重開未驗收 |
+| F17 存讀 | HAIR-007/017/029/033 | versioned IndexedDB 原型及資料驗證；舊 localStorage 可兼容讀取並遷移，Safari 重開未驗收 |
 | F18 跨設備 | HAIR-016/018/032/034、各平台 build | 未驗收 |
 
 B4 P0 工具 T01–T10 全保留；P1 T11–T18、P2 T19–T23 不擅自提前或刪除。B6 衝突規則及 HAIR-001–034 全保留，以上對照不是縮減原矩陣。功能優先級 P0/P1/P2 與缺陷嚴重度為不同欄位。
