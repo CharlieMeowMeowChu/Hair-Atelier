@@ -10,6 +10,7 @@ import { hasExceededDragThreshold } from './input-gesture';
 import { projectPointToArcSegment } from './line-arc';
 import { RecentMeasurements } from './performance-metrics';
 import { buildRibbonGeometryData } from './ribbon-geometry';
+import { keepHairOutsideEllipsoid } from './head-collision';
 import { readEditorHistory, writeEditorHistory } from './indexeddb-storage';
 
 const stage = document.querySelector<HTMLElement>('#stage');
@@ -115,6 +116,9 @@ function colorForStrand(id: string): string {
 }
 const hairLines = new Map<string, { line: Line; ribbon: Mesh; signature: string }>();
 const guideRibbonWidthMeters = 0.006;
+// Mirrors the visible head mesh (sphere radius .22, scaled 1 / 1.12 / .92).
+// It is render-only: editor state keeps the physical rest centreline unchanged.
+const headCollider = { center: [0, 0, 0] as Vec3, radii: [0.22, 0.2464, 0.2024] as Vec3, clearance: 0.018 };
 type Tool = 'rotate' | 'select' | 'cut' | 'clip' | 'curl' | 'comb' | 'part' | 'tuck' | 'ponytail' | 'halfup' | 'pair' | 'braid' | 'sweep' | 'grow';
 type HairHit = { id: string; s: number; point: Vector3 };
 let tool: Tool = 'rotate';
@@ -169,9 +173,12 @@ function redraw(): void {
     const existing = hairLines.get(strand.id);
     if (existing?.signature === signature) continue;
     const sampled = sampleStrandWithArcS(strand);
-    const points = sampled.map(({ point: [x, y, z] }) => new Vector3(x, y, z));
+    // A curl may mathematically pass through the head. Constrain only the
+    // rendered/pickable centreline so the visual hair stays outside the skull.
+    const renderedPoints = keepHairOutsideEllipsoid(sampled.map((sample) => sample.point), headCollider);
+    const points = renderedPoints.map(([x, y, z]) => new Vector3(x, y, z));
     const geometry = new BufferGeometry().setFromPoints(points);
-    const ribbonGeometry = createRibbonGeometry(sampled.map((sample) => sample.point));
+    const ribbonGeometry = createRibbonGeometry(renderedPoints);
     if (existing) {
       existing.line.geometry.dispose();
       existing.line.geometry = geometry;
@@ -184,7 +191,7 @@ function redraw(): void {
       const line = new Line(geometry, material);
       line.userData = { strandId: strand.id, sampleS: sampled.map((sample) => sample.s) };
       const ribbon = new Mesh(ribbonGeometry, new MeshBasicMaterial({
-        color: colorForStrand(strand.id), side: DoubleSide, transparent: true, opacity: 0.88, depthWrite: false,
+        color: colorForStrand(strand.id), side: DoubleSide, transparent: false, opacity: 1, depthWrite: true,
       }));
       hair.add(line, ribbon);
       hairLines.set(strand.id, { line, ribbon, signature });
@@ -558,10 +565,22 @@ renderer.domElement.addEventListener('pointercancel', (event) => finishGesture(e
 renderer.domElement.addEventListener('pointerleave', () => { if (!pointer) showCursor(undefined); });
 renderer.domElement.addEventListener('pointermove', (event) => { if (!pointer && tool !== 'rotate') showCursor(hitHair(event.clientX, event.clientY)); });
 
+const toolDrawer = document.querySelector<HTMLDialogElement>('#tool-drawer');
+document.querySelector<HTMLButtonElement>('#more-tools')?.addEventListener('click', () => {
+  if (!toolDrawer) return;
+  if (typeof toolDrawer.showModal === 'function') toolDrawer.showModal();
+  else toolDrawer.setAttribute('open', '');
+});
+document.querySelector<HTMLButtonElement>('#close-tools')?.addEventListener('click', () => toolDrawer?.close());
+toolDrawer?.addEventListener('click', (event) => {
+  if (event.target === toolDrawer) toolDrawer.close();
+});
+
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => {
   button.addEventListener('click', () => {
     tool = button.dataset.tool as Tool;
-    document.querySelectorAll('[data-tool]').forEach((item) => item.classList.toggle('active', item === button));
+    document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((item) => item.classList.toggle('active', item.dataset.tool === tool));
+    toolDrawer?.close();
     redraw();
   });
 });

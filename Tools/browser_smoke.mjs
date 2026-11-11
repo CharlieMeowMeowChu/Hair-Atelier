@@ -149,6 +149,8 @@ try {
     await delay(100);
   }
   const parsed = JSON.parse(state ?? '{}');
+  const phoneViewport = JSON.parse(await evaluate(client, `JSON.stringify({ scrollFitsViewport: document.documentElement.scrollHeight <= window.innerHeight, primaryToolCount: document.querySelectorAll('.tools:not(.drawer-tools) [data-tool]').length, moreToolsOpens: Boolean(document.querySelector('#more-tools') && document.querySelector('#tool-drawer')) })`));
+  parsed.phoneLayoutValid = phoneViewport.scrollFitsViewport && phoneViewport.primaryToolCount === 7 && phoneViewport.moreToolsOpens;
   const beforeRotate = await screenshot(client);
   await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', x: 160, y: 380, button: 'left', clickCount: 1 });
   await client.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 270, y: 400, button: 'left', buttons: 1 });
@@ -169,7 +171,7 @@ try {
   const tabletLayout = JSON.parse(await evaluate(client, `JSON.stringify({
     canvasCount: document.querySelectorAll('#stage canvas').length,
     toolColumns: getComputedStyle(document.querySelector('.tools')).gridTemplateColumns.trim().split(/\\s+/).length,
-    touchTargetsValid: [...document.querySelectorAll('button, select')].every((element) => element.getBoundingClientRect().height >= 44),
+    touchTargetsValid: [...document.querySelectorAll('button, select')].filter((element) => element.getBoundingClientRect().height > 0).every((element) => element.getBoundingClientRect().height >= 44),
   })`));
   parsed.tabletLayoutValid = tabletLayout.canvasCount === 1 && tabletLayout.toolColumns === 4 && tabletLayout.touchTargetsValid;
   await client.command('Emulation.clearDeviceMetricsOverride');
@@ -210,10 +212,10 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
   client?.close();
   await stop(chrome);

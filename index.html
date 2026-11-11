@@ -18,31 +18,38 @@
         <h1>捲曲、剪短、再增長</h1>
         <p id="status" aria-live="polite">載入 3D 髮束中…</p>
       </header>
-      <section id="stage" aria-label="可操作的三維髮束樣板"></section>
-      <dl id="overlay" aria-label="技術資料">
-        <div><dt>Selected</dt><dd id="metric-selected">—</dd></div>
-        <div><dt>Rest arc s</dt><dd id="metric-length">—</dd></div>
-        <div><dt>Curl r / pitch</dt><dd id="metric-curl">—</dd></div>
-        <div><dt>Cut preview</dt><dd id="metric-cut">—</dd></div>
-        <div><dt>Mesh update</dt><dd id="metric-mesh">—</dd></div>
-        <div><dt>Render p95</dt><dd id="metric-render">—</dd></div>
-      </dl>
-      <nav class="tools" aria-label="工具模式">
+      <section id="stage" aria-label="可操作的三維髮束樣板">
+        <dl id="overlay" aria-label="技術資料">
+          <div><dt>Selected</dt><dd id="metric-selected">—</dd></div>
+          <div><dt>Rest arc s</dt><dd id="metric-length">—</dd></div>
+          <div><dt>Curl r / pitch</dt><dd id="metric-curl">—</dd></div>
+          <div><dt>Cut preview</dt><dd id="metric-cut">—</dd></div>
+          <div><dt>Mesh update</dt><dd id="metric-mesh">—</dd></div>
+          <div><dt>Render p95</dt><dd id="metric-render">—</dd></div>
+        </dl>
+      </section>
+      <nav class="tools" aria-label="主要工具模式">
         <button data-tool="rotate" class="active">旋轉</button>
         <button data-tool="select">選取</button>
         <button data-tool="cut">剪刀</button>
         <button data-tool="clip">電剪</button>
         <button data-tool="curl">捲髮器</button>
         <button data-tool="comb">梳子</button>
-        <button data-tool="part">分界</button>
-        <button data-tool="tuck">夾耳後</button>
-        <button data-tool="ponytail">馬尾</button>
-        <button data-tool="halfup">公主頭</button>
-        <button data-tool="pair">兩束綁</button>
-        <button data-tool="braid">三股辮</button>
-        <button data-tool="sweep">側撥</button>
         <button data-tool="grow">增髮</button>
+        <button id="more-tools" class="secondary" aria-haspopup="dialog">更多工具</button>
       </nav>
+      <dialog id="tool-drawer" aria-label="全部造型工具">
+        <div class="drawer-heading"><strong>更多造型工具</strong><button id="close-tools" class="secondary" aria-label="關閉工具">關閉</button></div>
+        <nav class="tools drawer-tools" aria-label="更多工具模式">
+          <button data-tool="part">分界</button>
+          <button data-tool="tuck">夾耳後</button>
+          <button data-tool="ponytail">馬尾</button>
+          <button data-tool="halfup">公主頭</button>
+          <button data-tool="pair">兩束綁</button>
+          <button data-tool="braid">三股辮</button>
+          <button data-tool="sweep">側撥</button>
+        </nav>
+      </dialog>
       <label class="clipper-setting" for="clipper-length">電剪留髮 <output id="clipper-length-value">6 cm</output>
         <input id="clipper-length" type="range" min="1" max="20" value="6" step="1" />
       </label>
