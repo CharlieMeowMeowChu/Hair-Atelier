@@ -181,14 +181,14 @@ try {
       const request = indexedDB.open('hair-atelier', 1);
       request.onerror = () => resolve(undefined);
       request.onsuccess = () => {
-        const read = request.result.transaction('editor-history', 'readonly').objectStore('editor-history').get('current-v2');
+        const read = request.result.transaction('editor-history', 'readonly').objectStore('editor-history').get('current-v3');
         read.onerror = () => resolve(undefined);
         read.onsuccess = () => resolve(read.result);
       };
     }, 100);
   })`);
   parsed.indexedDbHistoryValid = (() => {
-    try { return JSON.parse(indexedHistory).version === 2; } catch { return false; }
+    try { return JSON.parse(indexedHistory).version === 3; } catch { return false; }
   })();
   await client.command('Page.navigate', { url: appUrl });
   const reloadDeadline = Date.now() + 10_000;

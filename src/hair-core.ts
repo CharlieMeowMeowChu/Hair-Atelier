@@ -50,12 +50,12 @@ export interface BraidConstraint {
 
 export interface HairState {
   /** schema v2 defines every persisted s/length in physical rest arc metres. */
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly strands: readonly GuideStrand[];
 }
 
 export interface EditorHistory {
-  readonly version: 2;
+  readonly version: 3;
   readonly current: HairState;
   readonly undo: readonly HairState[];
   readonly redo: readonly HairState[];
@@ -66,12 +66,6 @@ interface LegacyHairState {
   readonly strands: readonly GuideStrand[];
 }
 
-interface LegacyEditorHistory {
-  readonly version: 1;
-  readonly current: LegacyHairState;
-  readonly undo: readonly LegacyHairState[];
-  readonly redo: readonly LegacyHairState[];
-}
 
 export interface EditResult {
   readonly changed: boolean;
@@ -229,7 +223,7 @@ function migrateLegacyHairState(state: LegacyHairState): HairState | undefined {
     } : undefined;
     return { ...legacy, length: visibleLength, maximumLength, curls, tie, braid };
   });
-  const migrated: HairState = { schemaVersion: 2, strands };
+  const migrated: HairState = { schemaVersion: 3, strands };
   return stateHasValidStrands(migrated.strands, true) ? copyState(migrated) : undefined;
 }
 
@@ -237,9 +231,9 @@ export function parseHairState(serialized: string): HairState | undefined {
   try {
     const value: unknown = JSON.parse(serialized);
     if (!value || typeof value !== 'object') return undefined;
-    const candidate = value as Partial<HairState> | Partial<LegacyHairState>;
-    if (candidate.schemaVersion === 2 && stateHasValidStrands(candidate.strands, true)) {
-      return copyState(candidate as HairState);
+    const candidate = value as { schemaVersion?: number; strands?: unknown };
+    if ((candidate.schemaVersion === 2 || candidate.schemaVersion === 3) && stateHasValidStrands(candidate.strands, true)) {
+      return copyState({ schemaVersion: 3, strands: candidate.strands });
     }
     if (candidate.schemaVersion === 1 && stateHasValidStrands(candidate.strands, false)) {
       return migrateLegacyHairState(candidate as LegacyHairState);
@@ -254,8 +248,8 @@ export function parseEditorHistory(serialized: string): EditorHistory | undefine
   try {
     const value: unknown = JSON.parse(serialized);
     if (!value || typeof value !== 'object') return undefined;
-    const candidate = value as Partial<EditorHistory> | Partial<LegacyEditorHistory>;
-    if ((candidate.version !== 1 && candidate.version !== 2) || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo) ||
+    const candidate = value as { version?: number; current?: unknown; undo?: unknown; redo?: unknown };
+    if ((candidate.version !== 1 && candidate.version !== 2 && candidate.version !== 3) || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo) ||
       candidate.undo.length > 20 || candidate.redo.length > 20) return undefined;
     const parseState = (state: unknown): HairState | undefined => parseHairState(JSON.stringify(state));
     const current = parseState(candidate.current);
@@ -263,7 +257,7 @@ export function parseEditorHistory(serialized: string): EditorHistory | undefine
     const redo = candidate.redo.map(parseState);
     if (!current || undo.some((state) => !state) || redo.some((state) => !state)) return undefined;
     return {
-      version: 2,
+      version: 3,
       current,
       undo: undo as HairState[],
       redo: redo as HairState[],
@@ -357,7 +351,7 @@ export class HairEditor {
   public exportState(): HairState { return copyState(this.state); }
   public exportHistory(): EditorHistory {
     return {
-      version: 2,
+      version: 3,
       current: this.exportState(),
       undo: this.undoStack.map(copyState),
       redo: this.redoStack.map(copyState),
@@ -585,7 +579,7 @@ export function createDemoHairState(): HairState {
     A: [-0.12, 0.22, 0], B: [-0.04, 0.25, 0.04], C: [0.05, 0.25, 0.05], D: [0.13, 0.2, 0],
   };
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     strands: Object.entries(roots).map(([id, root]) => ({
       id, root, direction: [0, -1, 0], length: id === 'C' ? 0.4 : 0.3,
       maximumLength: id === 'C' ? 0.6 : 0.45, curls: [],

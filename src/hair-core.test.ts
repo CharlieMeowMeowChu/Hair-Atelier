@@ -9,8 +9,8 @@ describe('HairEditor core invariants', () => {
     const after = editor.exportState();
     expect(after.strands.find((strand) => strand.id === 'A')?.length).toBe(0.15);
     for (const id of ['B', 'C', 'D']) {
-      expect(canonicalState({ schemaVersion: 2, strands: [after.strands.find((strand) => strand.id === id)!] }))
-        .toBe(canonicalState({ schemaVersion: 2, strands: [before.strands.find((strand) => strand.id === id)!] }));
+      expect(canonicalState({ schemaVersion: 3, strands: [after.strands.find((strand) => strand.id === id)!] }))
+        .toBe(canonicalState({ schemaVersion: 3, strands: [before.strands.find((strand) => strand.id === id)!] }));
     }
   });
 

@@ -111,8 +111,8 @@ describe('rest arc-length sampler', () => {
     const history = parseEditorHistory(JSON.stringify({ version: 1, current, undo: [undo], redo: [redo] }));
     const direct = parseHairState(JSON.stringify(current));
 
-    expect(direct?.schemaVersion).toBe(2);
-    expect(history?.version).toBe(2);
+    expect(direct?.schemaVersion).toBe(3);
+    expect(history?.version).toBe(3);
     expect(history?.undo).toHaveLength(1);
     expect(history?.redo).toHaveLength(1);
     expect(history!.current.strands[0].length).toBeGreaterThan(0.75);
@@ -164,7 +164,7 @@ describe('curl orientation compatibility', () => {
       expect(dot(restTangentAt(strand, 0.3 - 1e-6), restTangentAt(strand, 0.3 + 1e-6))).toBeGreaterThan(0.999999);
       expect(measuredRestArcLength(strand)).toBeCloseTo(strand.length, 4);
     }
-    expect(parseHairState(JSON.stringify({ schemaVersion: 2, strands: [b] }))?.strands[0].curls[0].orientationMode).toBe('phase-v1');
+    expect(parseHairState(JSON.stringify({ schemaVersion: 3, strands: [b] }))?.strands[0].curls[0].orientationMode).toBe('phase-v1');
   });
   it('leaves unversioned saved curls on the legacy path and rejects unknown modes', () => {
     const legacy = { startS: 0.04, endS: 0.3, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
@@ -174,4 +174,19 @@ describe('curl orientation compatibility', () => {
     const invalid = { ...a, curls: [{ ...legacy, orientationMode: 'unknown' }] };
     expect(parseHairState(JSON.stringify({ schemaVersion: 2, strands: [invalid] }))).toBeUndefined();
   });
+});
+
+
+it('upgrades v2 history snapshots without losing legacy or versioned curl geometry', () => {
+  const legacy = { startS: 0.04, endS: 0.3, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+  const original = testStrand({ curls: [legacy] });
+  const transitional = testStrand({ curls: [{ ...legacy, orientationMode: 'phase-v1' }] });
+  const oldState = (strand: GuideStrand) => ({ schemaVersion: 2, strands: [strand] });
+  const parsed = parseEditorHistory(JSON.stringify({ version: 2, current: oldState(transitional), undo: [oldState(original)], redo: [oldState(transitional)] }));
+  expect(parsed?.version).toBe(3);
+  for (const [restored, expected] of [[parsed!.current.strands[0], transitional], [parsed!.undo[0].strands[0], original], [parsed!.redo[0].strands[0], transitional]] as const) {
+    expect(restored.curls).toEqual(expected.curls);
+    for (let i = 0; i <= 40; i += 1) expect(distance(restPointAt(restored, i / 100), restPointAt(expected, i / 100))).toBeLessThan(1e-10);
+  }
+  expect(parseEditorHistory(JSON.stringify({ version: 99, current: oldState(original), undo: [], redo: [] }))).toBeUndefined();
 });
