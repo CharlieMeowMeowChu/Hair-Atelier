@@ -360,6 +360,14 @@ export class HairEditor {
   public get canUndo(): boolean { return this.undoStack.length > 0; }
   public get canRedo(): boolean { return this.redoStack.length > 0; }
 
+  /** Reset the current hairstyle as a normal, undoable edit. */
+  public resetTo(initial: HairState): boolean {
+    if (canonicalState(this.state) === canonicalState(initial)) return false;
+    this.saveUndo();
+    this.state = copyState(initial);
+    return true;
+  }
+
   public cutAt(strandId: string, arcLengthMeters: number): EditResult {
     const strand = this.state.strands.find((candidate) => candidate.id === strandId);
     if (!strand || !Number.isFinite(arcLengthMeters)) return { changed: false, reason: 'Invalid target', strandId };

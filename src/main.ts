@@ -734,11 +734,12 @@ clipperLength?.addEventListener('input', () => {
   if (clipperLengthValue) clipperLengthValue.value = `${clipperLength.value} cm`;
 });
 document.querySelector<HTMLButtonElement>('#undo')?.addEventListener('click', () => {
+  if (!editor.canUndo) return;
   editor.undo();
   persistState();
   redraw();
 });
-document.querySelector<HTMLButtonElement>('#redo')?.addEventListener('click', () => { editor.redo(); persistState(); redraw(); });
+document.querySelector<HTMLButtonElement>('#redo')?.addEventListener('click', () => { if (!editor.canRedo) return; editor.redo(); persistState(); redraw(); });
 document.querySelector<HTMLButtonElement>('#clear-selection')?.addEventListener('click', () => {
   selectedStrandIds.clear();
   selectedId = undefined;
@@ -769,11 +770,12 @@ document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', ()
   })();
 });
 document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => {
-  editor = new HairEditor(createDemoHairState());
+  const changed = editor.resetTo(createDemoHairState());
   selectedStrandIds.clear();
   selectedId = undefined;
-  persistState();
+  if (changed) persistState();
   redraw();
+  appStatus.textContent = changed ? '已重設樣板，可按 Undo 還原' : '樣板已是初始狀態';
 });
 document.querySelector<HTMLButtonElement>('#front')?.addEventListener('click', () => {
   rotationX = 0;

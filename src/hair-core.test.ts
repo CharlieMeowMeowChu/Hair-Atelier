@@ -415,3 +415,27 @@ describe('multiple local curls', () => {
     expect(editor.exportState().strands.find((strand) => strand.id === 'C')!.curls).toEqual([]);
   });
 });
+
+describe('undoable reset', () => {
+  it('restores the prior hairstyle and its history after reset, including reload', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.cutAt('C', 0.2);
+    editor.growBy('C', 0.05);
+    const beforeReset = canonicalState(editor.exportState());
+    expect(editor.resetTo(createDemoHairState())).toBe(true);
+    expect(canonicalState(editor.exportState())).toBe(canonicalState(createDemoHairState()));
+    const saved = parseEditorHistory(JSON.stringify(editor.exportHistory()))!;
+    const reloaded = new HairEditor(saved.current, saved);
+    reloaded.undo();
+    expect(canonicalState(reloaded.exportState())).toBe(beforeReset);
+    reloaded.undo();
+    expect(reloaded.exportState().strands.find((strand) => strand.id === 'C')?.length).toBeCloseTo(0.2);
+    reloaded.redo(); reloaded.redo();
+    expect(canonicalState(reloaded.exportState())).toBe(canonicalState(createDemoHairState()));
+  });
+  it('does not add history when the current hairstyle already matches', () => {
+    const editor = new HairEditor(createDemoHairState());
+    expect(editor.resetTo(createDemoHairState())).toBe(false);
+    expect(editor.canUndo).toBe(false);
+  });
+});
