@@ -381,8 +381,8 @@ describe('HairEditor core invariants', () => {
 });
 
 describe('multiple local curls', () => {
-  const first = { startS: 0.04, endS: 0.12, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
-  const second = { startS: 0.2, endS: 0.3, radius: 0.02, pitch: 0.09, phase: 0.1, direction: -1 as const };
+  const first = { startS: 0.04, endS: 0.12, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const, orientationMode: 'phase-v1' as const };
+  const second = { startS: 0.2, endS: 0.3, radius: 0.02, pitch: 0.09, phase: 0.1, direction: -1 as const, orientationMode: 'phase-v1' as const };
   it('preserves earlier curl geometry and both segments through cut, growth and history', () => {
     const editor = new HairEditor(createDemoHairState());
     expect(editor.curlRange('C', first).changed).toBe(true);

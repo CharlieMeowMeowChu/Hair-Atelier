@@ -10,6 +10,7 @@ export interface CurlSegment {
   readonly pitch: number;
   readonly phase: number;
   readonly direction: -1 | 1;
+  readonly orientationMode?: 'phase-v1';
 }
 
 export interface GuideStrand {
@@ -121,7 +122,8 @@ function curlIsValid(value: unknown): value is CurlSegment {
   if (!value || typeof value !== 'object') return false;
   const curl = value as Partial<CurlSegment>;
   return Number.isFinite(curl.startS) && Number.isFinite(curl.endS) && Number.isFinite(curl.radius) && Number.isFinite(curl.pitch) && Number.isFinite(curl.phase) &&
-    curl.startS! >= 0 && curl.endS! > curl.startS! && curl.radius! > 0 && curl.pitch! > 0 && (curl.direction === -1 || curl.direction === 1);
+    curl.startS! >= 0 && curl.endS! > curl.startS! && curl.radius! > 0 && curl.pitch! > 0 && (curl.direction === -1 || curl.direction === 1) &&
+    (curl.orientationMode === undefined || curl.orientationMode === 'phase-v1');
 }
 
 function strandIsValid(value: unknown, requirePhysicalRanges: boolean): value is GuideStrand {
@@ -527,7 +529,7 @@ export class HairEditor {
     }
     const visibleEndS = Math.min(curl.endS, strand.length);
     if (curl.startS >= visibleEndS) return { changed: false, reason: 'Curl range is outside current strand', strandId };
-    const limited = { ...curl, endS: visibleEndS >= strand.length - 1e-9 ? strand.maximumLength : visibleEndS };
+    const limited = { ...curl, orientationMode: 'phase-v1' as const, endS: visibleEndS >= strand.length - 1e-9 ? strand.maximumLength : visibleEndS };
     const constraint = assessActionIntent(this.state, { type: 'curl', strandId, startS: limited.startS, endS: visibleEndS });
     if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
     // Splitting an existing helix would require retaining its frame and phase;

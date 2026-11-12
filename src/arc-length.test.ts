@@ -148,3 +148,30 @@ describe('rest arc-length sampler', () => {
     }))).toBeUndefined();
   });
 });
+
+describe('curl orientation compatibility', () => {
+  it('uses phase for new curls while preserving the start point, tangent and arc length', () => {
+    const create = (phase: number) => {
+      const editor = new HairEditor(createDemoHairState());
+      editor.curlRange('C', { startS: 0.04, endS: 0.3, radius: 0.025, pitch: 0.08, phase, direction: 1 });
+      return editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    };
+    const a = create(0), b = create(Math.PI / 2);
+    expect(distance(restPointAt(a, 0.13), restPointAt(b, 0.13))).toBeGreaterThan(0.01);
+    expect(distance(restPointAt(a, 0.04), restPointAt(b, 0.04))).toBeLessThan(1e-10);
+    for (const strand of [a, b]) {
+      expect(dot(restTangentAt(strand, 0.04 - 1e-6), restTangentAt(strand, 0.04 + 1e-6))).toBeGreaterThan(0.999999);
+      expect(dot(restTangentAt(strand, 0.3 - 1e-6), restTangentAt(strand, 0.3 + 1e-6))).toBeGreaterThan(0.999999);
+      expect(measuredRestArcLength(strand)).toBeCloseTo(strand.length, 4);
+    }
+    expect(parseHairState(JSON.stringify({ schemaVersion: 2, strands: [b] }))?.strands[0].curls[0].orientationMode).toBe('phase-v1');
+  });
+  it('leaves unversioned saved curls on the legacy path and rejects unknown modes', () => {
+    const legacy = { startS: 0.04, endS: 0.3, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+    const a = testStrand({ curls: [legacy] });
+    const b = testStrand({ curls: [{ ...legacy, phase: 0 }] });
+    for (let i = 0; i <= 40; i += 1) expect(distance(restPointAt(a, i / 100), restPointAt(b, i / 100))).toBeLessThan(1e-10);
+    const invalid = { ...a, curls: [{ ...legacy, orientationMode: 'unknown' }] };
+    expect(parseHairState(JSON.stringify({ schemaVersion: 2, strands: [invalid] }))).toBeUndefined();
+  });
+});

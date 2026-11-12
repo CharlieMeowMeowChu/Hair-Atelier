@@ -108,7 +108,11 @@ function makeHelix(start: Vec3, startS: number, curl: CurlSegment, incomingTange
   const turnLength = Math.hypot(circumference, curl.pitch);
   const axisSpeed = curl.pitch / turnLength;
   const radialSpeed = circumference / turnLength;
-  const q = orthogonal(incomingTangent);
+  const baseQ = orthogonal(incomingTangent);
+  // Legacy curls have no orientationMode and retain their original geometry.
+  const q = curl.orientationMode === 'phase-v1'
+    ? add(scale(baseQ, Math.cos(curl.phase)), scale(cross(incomingTangent, baseQ), Math.sin(curl.phase)))
+    : baseQ;
   const axis = normalize(add(scale(incomingTangent, axisSpeed), scale(q, radialSpeed)), incomingTangent);
   const radialAtStart = normalize(add(scale(incomingTangent, radialSpeed), scale(q, -axisSpeed)), q);
   const radialDerivativeBasis = scale(radialAtStart, curl.direction);
