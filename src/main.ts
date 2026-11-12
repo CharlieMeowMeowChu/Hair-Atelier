@@ -336,6 +336,21 @@ function sweepHits(fromX: number, fromY: number, toX: number, toY: number): Hair
   return hits;
 }
 
+type SweepGesture = { x: number; y: number; hasDragged: boolean; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string> };
+function collectSweep(gesture: SweepGesture, mode: 'cut' | 'clip', x: number, y: number): HairHit[] {
+  if (!gesture.hasDragged && !hasExceededDragThreshold(gesture, { x, y })) return [];
+  const hits = sweepHits(gesture.x, gesture.y, x, y);
+  if (!gesture.hasDragged && gesture.hit) hits.unshift(gesture.hit);
+  gesture.hasDragged = true;
+  for (const hit of hits) {
+    if (mode === 'cut') gesture.cuts.set(hit.id, Math.min(gesture.cuts.get(hit.id) ?? hit.s, hit.s));
+    else gesture.clippedIds.add(hit.id);
+  }
+  gesture.x = x;
+  gesture.y = y;
+  return hits;
+}
+
 function highlightHair(strandId?: string): void {
   for (const [id, record] of hairLines) {
     (record.ribbon.material as MeshBasicMaterial).color.set(
@@ -536,29 +551,14 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (!pointer || (tool !== 'rotate' && event.pointerId !== pointer.pointerId)) return;
   if (['select', 'grow', 'tuck', 'ponytail', 'halfup', 'pair', 'braid', 'sweep'].includes(tool) && hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) pointer.hasDragged = true;
-  if (tool === 'cut') {
-    if (!pointer.hasDragged && !hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) return;
-    pointer.hasDragged = true;
-    const hits = sweepHits(pointer.x, pointer.y, event.clientX, event.clientY);
-    for (const hit of hits) pointer.cuts.set(hit.id, Math.min(pointer.cuts.get(hit.id) ?? hit.s, hit.s));
-    pointer.x = event.clientX;
-    pointer.y = event.clientY;
+  if (tool === 'cut' || tool === 'clip') {
+    const hits = collectSweep(pointer, tool, event.clientX, event.clientY);
     const latest = hits.at(-1);
-    showCursor(latest);
-    if (latest) {
+    if (pointer.hasDragged) showCursor(latest);
+    if (tool === 'cut' && latest) {
       previewCutS = pointer.cuts.get(latest.id);
       updateOverlay();
     }
-    return;
-  }
-  if (tool === 'clip') {
-    if (!pointer.hasDragged && !hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) return;
-    pointer.hasDragged = true;
-    const hits = sweepHits(pointer.x, pointer.y, event.clientX, event.clientY);
-    hits.forEach((hit) => pointer?.clippedIds.add(hit.id));
-    pointer.x = event.clientX;
-    pointer.y = event.clientY;
-    showCursor(hits.at(-1));
     return;
   }
   if (tool === 'comb') { showCursor(hitHair(event.clientX, event.clientY)); return; }
@@ -612,6 +612,8 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
   updateOverlay();
   highlightHair();
   if (cancelled || gesture.tool !== tool) { requestRender(); return; }
+  // The final position can arrive only with pointerup (e.g. a fast flick).
+  if (tool === 'cut' || tool === 'clip') collectSweep(gesture, tool, event.clientX, event.clientY);
   const rect = renderer.domElement.getBoundingClientRect();
   const releasedInside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
   if (gesture.hit && releasedInside && !gesture.hasDragged && !hasExceededDragThreshold(gesture, { x: event.clientX, y: event.clientY }) && ['select', 'grow', 'tuck', 'ponytail', 'halfup', 'pair', 'braid', 'sweep'].includes(tool)) {
