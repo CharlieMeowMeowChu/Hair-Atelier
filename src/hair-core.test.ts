@@ -379,3 +379,39 @@ describe('HairEditor core invariants', () => {
     expect(parseEditorHistory('{"version":1,"current":{},"undo":[],"redo":[]}')).toBeUndefined();
   });
 });
+
+describe('multiple local curls', () => {
+  const first = { startS: 0.04, endS: 0.12, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+  const second = { startS: 0.2, endS: 0.3, radius: 0.02, pitch: 0.09, phase: 0.1, direction: -1 as const };
+  it('preserves earlier curl geometry and both segments through cut, growth and history', () => {
+    const editor = new HairEditor(createDemoHairState());
+    expect(editor.curlRange('C', first).changed).toBe(true);
+    const previous = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    const before = pointAt(previous, 0.08);
+    expect(editor.curlRange('C', second).changed).toBe(true);
+    const get = () => editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    expect(get().curls).toEqual([first, second]);
+    expect(pointAt(get(), 0.08)).toEqual(before);
+    editor.cutAt('C', 0.25);
+    editor.growBy('C', 0.05);
+    expect(get().curls).toEqual([first, second]);
+    editor.undo(); editor.undo(); editor.undo();
+    expect(get().curls).toEqual([first]);
+    editor.redo();
+    expect(get().curls).toEqual([first, second]);
+    expect(parseHairState(JSON.stringify(editor.exportState()))?.strands.find((strand) => strand.id === 'C')?.curls).toEqual([first, second]);
+  });
+  it('rejects overlapping ranges and non-finite curl parameters without altering history', () => {
+    const editor = new HairEditor(createDemoHairState());
+    editor.curlRange('C', first);
+    const before = canonicalState(editor.exportState());
+    expect(editor.curlRange('C', { ...second, startS: 0.1 }).changed).toBe(false);
+    for (const key of ['startS', 'endS', 'radius', 'pitch', 'phase'] as const) {
+      expect(editor.curlRange('C', { ...second, [key]: Number.NaN }).changed).toBe(false);
+      expect(editor.curlRange('C', { ...second, [key]: Number.POSITIVE_INFINITY }).changed).toBe(false);
+    }
+    expect(canonicalState(editor.exportState())).toBe(before);
+    editor.undo();
+    expect(editor.exportState().strands.find((strand) => strand.id === 'C')!.curls).toEqual([]);
+  });
+});

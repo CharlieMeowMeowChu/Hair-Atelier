@@ -522,8 +522,7 @@ export class HairEditor {
 
   public curlRange(strandId: string, curl: CurlSegment): EditResult {
     const strand = this.state.strands.find((candidate) => candidate.id === strandId);
-    if (!strand || curl.radius <= 0 || curl.pitch <= 0 || curl.startS < 0 || curl.endS <= curl.startS ||
-      (curl.direction !== -1 && curl.direction !== 1)) {
+    if (!strand || !curlIsValid(curl)) {
       return { changed: false, reason: 'Invalid curl', strandId };
     }
     const visibleEndS = Math.min(curl.endS, strand.length);
@@ -531,8 +530,14 @@ export class HairEditor {
     const limited = { ...curl, endS: visibleEndS >= strand.length - 1e-9 ? strand.maximumLength : visibleEndS };
     const constraint = assessActionIntent(this.state, { type: 'curl', strandId, startS: limited.startS, endS: visibleEndS });
     if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
+    // Splitting an existing helix would require retaining its frame and phase;
+    // reject overlap until that representation exists instead of deleting it.
+    if (strand.curls.some((existing) => limited.startS < existing.endS && limited.endS > existing.startS)) {
+      return { changed: false, reason: '所選範圍已有捲曲；暫未支援重疊修改', strandId };
+    }
     this.saveUndo();
-    this.state = replaceStrand(this.state, { ...strand, curls: [limited] });
+    const curls = [...strand.curls, limited].sort((a, b) => a.startS - b.startS);
+    this.state = replaceStrand(this.state, { ...strand, curls });
     return { changed: true, strandId, oldLength: strand.length, newLength: strand.length };
   }
 
