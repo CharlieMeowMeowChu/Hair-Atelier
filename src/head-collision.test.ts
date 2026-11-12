@@ -18,3 +18,16 @@ describe('head collision presentation constraint', () => {
     expect(isOutsideEllipsoid(point, head)).toBe(true);
   });
 });
+
+it('keeps a real editor curl out of the displayed head without changing its hair data', async () => {
+  const { createDemoHairState, HairEditor, sampleStrand } = await import('./hair-core');
+  const editor = new HairEditor(createDemoHairState());
+  const result = editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 });
+  expect(result.changed).toBe(true);
+  const c = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+  const restSamples = sampleStrand(c, 80);
+  const renderedSamples = keepHairOutsideEllipsoid(restSamples, head);
+  expect(restSamples.some((point) => !isOutsideEllipsoid(point, head))).toBe(true);
+  expect(renderedSamples.every((point) => isOutsideEllipsoid(point, head))).toBe(true);
+  expect(editor.exportState().strands.find((strand) => strand.id === 'C')).toEqual(c);
+});
