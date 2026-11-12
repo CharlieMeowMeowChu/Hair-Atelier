@@ -294,16 +294,26 @@ function toolLabel(value: Tool): string {
   return ({ rotate: '旋轉檢視', select: '選取：點按髮束加入或移除', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：套用至選取組別', halfup: '公主頭：套用至選取組別', pair: '兩束綁：先選取兩束或以上，再點按髮束', braid: '三股辮：需要選取三束', sweep: '側撥：點按任一髮束', grow: '增髮：點按髮束' })[value];
 }
 
-function hitHair(clientX: number, clientY: number): HairHit | undefined {
-  // Keep a roughly stable screen-space hit target when pinch zoom changes distance.
+interface PickContext { rect: DOMRect; lines: Line[]; cameraPosition: Vector3 }
+const pickPosition = new Vector2();
+const visibilityRaycaster = new Raycaster();
+function preparePickContext(): PickContext {
   raycaster.params.Line.threshold = MathUtils.clamp(0.014 * camera.position.z / 1.35, 0.01, 0.025);
-  const rect = renderer.domElement.getBoundingClientRect();
+  scene.updateMatrixWorld(true);
+  camera.updateMatrixWorld(true);
+  return {
+    rect: renderer.domElement.getBoundingClientRect(),
+    lines: [...hairLines.values()].map((record) => record.line),
+    cameraPosition: camera.getWorldPosition(new Vector3()),
+  };
+}
+function hitHair(clientX: number, clientY: number, context = preparePickContext()): HairHit | undefined {
+  const { rect, lines, cameraPosition } = context;
   const x = ((clientX - rect.left) / rect.width) * 2 - 1;
   const y = -((clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(new Vector2(x, y), camera);
-  scene.updateMatrixWorld(true);
-  const candidates = raycaster.intersectObjects([...hairLines.values()].map((record) => record.line), false);
-  const intersection = nearestVisibleHairHit(candidates, camera.getWorldPosition(new Vector3()), headRig);
+  raycaster.setFromCamera(pickPosition.set(x, y), camera);
+  const candidates = raycaster.intersectObjects(lines, false);
+  const intersection = nearestVisibleHairHit(candidates, cameraPosition, headRig, visibilityRaycaster);
   if (!intersection) return undefined;
   const { strandId, sampleS } = intersection.object.userData as {
     strandId: string; sampleS: readonly number[];
@@ -334,9 +344,10 @@ function sweepHits(fromX: number, fromY: number, toX: number, toY: number): Hair
   const spacing = sweepStepPixels(radius, renderer.domElement.clientHeight, MathUtils.degToRad(camera.fov), maxDistance);
   const steps = Math.max(1, Math.ceil(distance / spacing));
   const hits: HairHit[] = [];
+  const context = preparePickContext();
   for (let step = 1; step <= steps; step += 1) {
     const t = step / steps;
-    const hit = hitHair(fromX + (toX - fromX) * t, fromY + (toY - fromY) * t);
+    const hit = hitHair(fromX + (toX - fromX) * t, fromY + (toY - fromY) * t, context);
     if (hit) hits.push(hit);
   }
   return hits;

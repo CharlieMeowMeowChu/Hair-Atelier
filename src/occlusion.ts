@@ -1,8 +1,7 @@
 import { Raycaster, Vector3, type Intersection, type Object3D } from 'three';
 
 /** Check the actual hair hit point, not the finger ray, against opaque head geometry. */
-export function nearestVisibleHairHit<T extends Intersection>(hits: readonly T[], cameraPosition: Vector3, head: Object3D): T | undefined {
-  const visibilityRay = new Raycaster();
+export function nearestVisibleHairHit<T extends Intersection>(hits: readonly T[], cameraPosition: Vector3, head: Object3D, visibilityRay = new Raycaster()): T | undefined {
   const direction = new Vector3();
   for (const hit of hits) {
     direction.subVectors(hit.point, cameraPosition);
