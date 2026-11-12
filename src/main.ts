@@ -16,6 +16,7 @@ import { readEditorHistory, StorageConflictError, writeEditorHistory, type Stora
 import { SaveQueue } from './save-queue';
 import { freeCurlInterval } from './curl-target';
 import { growthMessage } from './growth-message';
+import { nearestVisibleHairHit } from './occlusion';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -300,9 +301,8 @@ function hitHair(clientX: number, clientY: number): HairHit | undefined {
   const y = -((clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(new Vector2(x, y), camera);
   scene.updateMatrixWorld(true);
-  const headDistance = raycaster.intersectObject(headRig, true)[0]?.distance ?? Number.POSITIVE_INFINITY;
-  const intersection = raycaster.intersectObjects([...hairLines.values()].map((record) => record.line), false)
-    .find((candidate) => candidate.distance <= headDistance + 0.002);
+  const candidates = raycaster.intersectObjects([...hairLines.values()].map((record) => record.line), false);
+  const intersection = nearestVisibleHairHit(candidates, camera.getWorldPosition(new Vector3()), headRig);
   if (!intersection) return undefined;
   const { strandId, sampleS } = intersection.object.userData as {
     strandId: string; sampleS: readonly number[];
