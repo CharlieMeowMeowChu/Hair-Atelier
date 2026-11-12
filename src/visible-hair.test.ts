@@ -31,3 +31,17 @@ describe('visible curl prefix', () => {
     }
   });
 });
+
+it('preserves the displayed prefix while extending beyond a recorded non-grid tail', () => {
+  const editor = new HairEditor(createDemoHairState());
+  editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 });
+  editor.growBy('C', 0.213);
+  const get = () => visibleHairSamples(editor.exportState().strands.find((strand) => strand.id === 'C')!, head);
+  const before = get();
+  editor.growBy('C', 0.05);
+  const after = get();
+  for (let i = 0; i <= 100; i += 1) {
+    const s = 0.613 * i / 100;
+    expect(Math.hypot(...at(before, s).map((v, n) => v - at(after, s)[n]))).toBeLessThan(0.0005);
+  }
+});

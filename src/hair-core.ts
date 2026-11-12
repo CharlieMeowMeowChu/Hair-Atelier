@@ -81,6 +81,8 @@ export interface CutTarget {
 }
 
 const minimumStubble = 0.01;
+// Temporary technical-spike bound; final limit remains subject to device testing.
+export const prototypeGrowthLimitMeters = 2;
 const copyState = (state: HairState): HairState => structuredClone(state);
 
 const replaceStrand = (state: HairState, strand: GuideStrand): HairState => ({
@@ -572,14 +574,18 @@ export class HairEditor {
     if (!strand || !Number.isFinite(deltaArcLengthMeters) || deltaArcLengthMeters <= 0) {
       return { changed: false, reason: 'Invalid growth', strandId };
     }
-    const length = Math.min(strand.maximumLength, strand.length + deltaArcLengthMeters);
+    const length = Math.min(Math.max(strand.maximumLength, prototypeGrowthLimitMeters), strand.length + deltaArcLengthMeters);
     if (length === strand.length) return { changed: false, reason: 'At maximum recorded length', strandId };
     const constraint = assessActionIntent(this.state, { type: 'grow', strandId, deltaS: deltaArcLengthMeters });
     if (constraint.decision === 'Rejected' || constraint.decision === 'RequiresConfirmation') {
       return { changed: false, reason: constraint.message, strandId };
     }
+    const maximumLength = Math.max(strand.maximumLength, length);
+    const curls = strand.curls.map((curl, index) =>
+      index === strand.curls.length - 1 && curl.endS === strand.maximumLength && maximumLength > strand.maximumLength
+        ? { ...curl, endS: maximumLength } : curl);
     this.saveUndo();
-    this.state = replaceStrand(this.state, { ...strand, length });
+    this.state = replaceStrand(this.state, { ...strand, length, maximumLength, curls });
     return { changed: true, strandId, oldLength: strand.length, newLength: length };
   }
 

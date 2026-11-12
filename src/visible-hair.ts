@@ -1,11 +1,21 @@
-import { sampleStrandWithArcS, type GuideStrand } from './hair-core';
+import { pointAt, type GuideStrand } from './hair-core';
 import { constrainHairSamples, type EllipsoidCollider, type HairCollisionSample } from './head-collision';
 
 /** Build the full material path independent of the visible cut length. */
 export function fullHairSamples(strand: GuideStrand, collider: EllipsoidCollider): HairCollisionSample[] {
-  const full = { ...strand, length: strand.maximumLength };
-  const segments = Math.max(40, Math.ceil(strand.maximumLength / 0.01));
-  return constrainHairSamples(sampleStrandWithArcS(full, segments), collider);
+  // A fixed material grid keeps previously displayed samples unchanged when
+  // the recorded tail is extended. Evaluate a complete final grid interval.
+  const step = 0.01;
+  const segments = Math.max(40, Math.floor(strand.maximumLength / step + 1e-10) + 1);
+  const horizon = segments * step;
+  const curls = strand.curls.map((curl, index) => index === strand.curls.length - 1 && curl.endS === strand.maximumLength
+    ? { ...curl, endS: horizon } : curl);
+  const full = { ...strand, curls, length: horizon, maximumLength: horizon };
+  const samples = Array.from({ length: segments + 1 }, (_, index) => {
+    const s = index * step;
+    return { s, point: pointAt(full, s) };
+  });
+  return constrainHairSamples(samples, collider);
 }
 
 /** Clip the full path at the current material length. */

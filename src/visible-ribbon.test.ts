@@ -54,3 +54,19 @@ it('does not add degenerate triangles when a cut lands exactly on a sample', () 
   const original = triangles(buildRibbonGeometryData(samples.map((sample) => sample.point), 0.006, farHead));
   expect(surface.reduce((sum, triangle) => sum + triangle.getArea(), 0)).toBeCloseTo(original[0].getArea() + original[1].getArea(), 9);
 });
+
+it('keeps the original ribbon surface when a curled non-grid tail grows beyond its recording', () => {
+  const editor = new HairEditor(createDemoHairState());
+  editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.7, direction: -1 });
+  editor.growBy('C', 0.213);
+  const strand = () => editor.exportState().strands.find((item) => item.id === 'C')!;
+  const ribbon = () => buildVisibleRibbon(fullHairSamples(strand(), head), strand().length, 0.006, head);
+  const before = ribbon();
+  editor.growBy('C', 0.05);
+  const afterTriangles = triangles(ribbon());
+  const nearest = new Vector3();
+  for (let i = 0; i < before.positions.length; i += 3) {
+    const p = new Vector3().fromArray(before.positions, i);
+    expect(Math.min(...afterTriangles.map((triangle) => triangle.closestPointToPoint(p, nearest).distanceTo(p)))).toBeLessThanOrEqual(0.0005);
+  }
+});

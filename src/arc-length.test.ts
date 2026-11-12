@@ -218,3 +218,36 @@ it('rejects legacy migrations exceeding the prototype work budget before allocat
   const many = { schemaVersion: 1, strands: [{ ...testStrand(), maximumLength: 30 }] };
   expect(parseEditorHistory(JSON.stringify({ version: 1, current: many, undo: Array(20).fill(many), redo: Array(20).fill(many) }))).toBeUndefined();
 });
+
+it('extends past the recorded end without changing the retained curl or breaking the tangent', () => {
+  const editor = new HairEditor(createDemoHairState());
+  editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.7, direction: 1 });
+  editor.growBy('C', 0.2);
+  const before = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+  const samples = Array.from({ length: 61 }, (_, i) => restPointAt(before, i * 0.01));
+  expect(editor.growBy('C', 0.05).changed).toBe(true);
+  const grown = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+  expect(grown.length).toBeCloseTo(0.65);
+  expect(grown.maximumLength).toBeCloseTo(0.65);
+  expect(grown.curls[0].endS).toBeCloseTo(0.65);
+  samples.forEach((p, i) => expect(distance(p, restPointAt(grown, i * 0.01))).toBeLessThan(1e-9));
+  expect(dot(restTangentAt(grown, 0.6 - 1e-6), restTangentAt(grown, 0.6 + 1e-6))).toBeGreaterThan(0.999999);
+  const saved = parseEditorHistory(JSON.stringify(editor.exportHistory()))!;
+  const restored = new HairEditor(saved.current, saved);
+  restored.undo();
+  expect(restored.exportState().strands.find((strand) => strand.id === 'C')?.length).toBeCloseTo(0.6);
+  restored.redo();
+  expect(restored.exportState().strands.find((strand) => strand.id === 'C')?.length).toBeCloseTo(0.65);
+});
+
+it('extends a straight tail without extending a curl that ends before the recorded tip', () => {
+  const editor = new HairEditor(createDemoHairState());
+  editor.curlRange('C', { startS: 0.04, endS: 0.2, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 });
+  editor.growBy('C', 0.2);
+  const prior = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+  editor.growBy('C', 0.05);
+  const grown = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+  expect(grown.curls).toEqual(prior.curls);
+  expect(dot(restTangentAt(grown, 0.6), restTangentAt(grown, 0.65))).toBeGreaterThan(0.999999);
+  expect(distance(restPointAt(prior, 0.55), restPointAt(grown, 0.55))).toBeLessThan(1e-9);
+});
