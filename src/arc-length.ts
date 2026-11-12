@@ -138,6 +138,8 @@ function validCurls(strand: GuideStrand): readonly CurlSegment[] {
 
 function buildSegments(strand: GuideStrand): readonly RestSegment[] {
   const baseTangent = effectiveBaseTangent(strand);
+  // A valid zero-length saved guide still has a fixed root and direction.
+  if (strand.maximumLength === 0) return [{ kind: 'line', startS: 0, endS: 0, start: strand.root, tangent: baseTangent }];
   const segments: RestSegment[] = [];
   const curls = validCurls(strand);
   let point = strand.root;

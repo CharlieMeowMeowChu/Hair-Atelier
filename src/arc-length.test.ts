@@ -190,3 +190,21 @@ it('upgrades v2 history snapshots without losing legacy or versioned curl geomet
   }
   expect(parseEditorHistory(JSON.stringify({ version: 99, current: oldState(original), undo: [], redo: [] }))).toBeUndefined();
 });
+
+it('restores and samples zero-length saved strands through undo and redo', async () => {
+  const { visibleHairSamples } = await import('./visible-hair');
+  const empty = testStrand({ root: [0, 0.3, 0], length: 0, maximumLength: 0 });
+  const zeroState = { schemaVersion: 3, strands: [empty] };
+  const regularState = { schemaVersion: 3, strands: [testStrand()] };
+  const history = parseEditorHistory(JSON.stringify({ version: 3, current: regularState, undo: [zeroState], redo: [] }))!;
+  const editor = new HairEditor(history.current, history);
+  editor.undo();
+  const restored = editor.exportState().strands[0];
+  expect(restPointAt(restored, 0)).toEqual(empty.root);
+  expect(restTangentAt(restored, 0)).toEqual([0, -1, 0]);
+  expect(sampleStrandWithArcS(restored).every((sample) => sample.s === 0 && distance(sample.point, empty.root) === 0)).toBe(true);
+  const head = { center: [0, 0, 0] as const, radii: [0.22, 0.2464, 0.2024] as const, clearance: 0.018 };
+  expect(visibleHairSamples(restored, head).every((sample) => distance(sample.point, empty.root) === 0)).toBe(true);
+  editor.redo();
+  expect(editor.exportState().strands[0].length).toBe(0.4);
+});
