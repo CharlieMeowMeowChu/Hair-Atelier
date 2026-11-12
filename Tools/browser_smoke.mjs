@@ -340,6 +340,30 @@ try {
     };
   })`);
   parsed.corruptStorageProtected = parsed.corruptStorageProtected && protectedValue === '{damaged-v3';
+  const oversizedHistory = JSON.parse(indexedHistory);
+  oversizedHistory.undo.push(structuredClone(oversizedHistory.current));
+  oversizedHistory.undo.at(-1).strands[0].maximumLength = 1e100;
+  const oversizedSerialized = JSON.stringify(oversizedHistory);
+  await storageWrite(oversizedSerialized, legacySerialized);
+  await client.command('Page.navigate', { url: appUrl });
+  const preflightDeadline = Date.now() + 10_000;
+  while (Date.now() < preflightDeadline) {
+    parsed.oversizedStorageProtected = await evaluate(client, "document.querySelector('#storage-warning')?.textContent?.includes('暫不能安全顯示存檔') ?? false");
+    if (parsed.oversizedStorageProtected) break;
+    await delay(100);
+  }
+  await evaluate(client, "document.querySelector('#reset').click(); document.querySelector('#save').click()");
+  await waitStatus('瀏覽器拒絕本機儲存');
+  const afterOversized = await evaluate(client, `new Promise((resolve, reject) => {
+    const open = indexedDB.open('hair-atelier', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result, read = db.transaction('editor-history', 'readonly').objectStore('editor-history').get('current-v3');
+      read.onsuccess = () => { db.close(); resolve(read.result); };
+      read.onerror = () => reject(read.error);
+    };
+  })`);
+  parsed.oversizedStorageProtected = parsed.oversizedStorageProtected && afterOversized === oversizedSerialized;
   await storageWrite(indexedHistory, legacySerialized);
   await client.command('Page.navigate', { url: appUrl });
   await waitStatus('已自動讀取本機儲存與操作歷史');
@@ -400,10 +424,10 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.corruptStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.corruptStorageProtected || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
   secondClient?.close();
   client?.close();

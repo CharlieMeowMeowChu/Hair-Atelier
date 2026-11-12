@@ -18,6 +18,7 @@ import { freeCurlInterval } from './curl-target';
 import { growthMessage } from './growth-message';
 import { nearestVisibleHairHit } from './occlusion';
 import { clipSweepToBounds, sweepStepPixels } from './sweep-sampling';
+import { canRenderHistory } from './runtime-budget';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -81,7 +82,14 @@ async function loadPersistedEditor(): Promise<{ editor?: HairEditor; token: Stor
       showStorageWarning('本機存檔無法讀取，已暫停儲存以保護資料。');
       return undefined;
     }
-    if (indexedHistory) return { editor: new HairEditor(indexedHistory.current, indexedHistory), token: read.token };
+    if (indexedHistory) {
+      if (!canRenderHistory(indexedHistory)) {
+        storageProtected = true;
+        showStorageWarning('此樣板暫不能安全顯示存檔；已暫停儲存以保護資料。');
+        return undefined;
+      }
+      return { editor: new HairEditor(indexedHistory.current, indexedHistory), token: read.token };
+    }
     for (const key of [storageKey, legacyHistoryStorageKey]) {
       const raw = localStorage.getItem(key);
       if (raw === null) continue;
@@ -89,6 +97,11 @@ async function loadPersistedEditor(): Promise<{ editor?: HairEditor; token: Stor
       if (!history) {
         storageProtected = true;
         showStorageWarning('舊存檔無法讀取，已暫停儲存以保護資料。');
+        return undefined;
+      }
+      if (!canRenderHistory(history)) {
+        storageProtected = true;
+        showStorageWarning('此樣板暫不能安全顯示舊存檔；已暫停儲存以保護資料。');
         return undefined;
       }
       const restored = new HairEditor(history.current, history);
@@ -103,6 +116,11 @@ async function loadPersistedEditor(): Promise<{ editor?: HairEditor; token: Stor
       return undefined;
     }
     const restored = new HairEditor(legacyState);
+    if (!canRenderHistory(restored.exportHistory())) {
+      storageProtected = true;
+      showStorageWarning('此樣板暫不能安全顯示舊存檔；已暫停儲存以保護資料。');
+      return undefined;
+    }
     return { editor: restored, token: read.token };
   } catch {
     storageProtected = true;
