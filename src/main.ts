@@ -370,6 +370,29 @@ function applyViewRotation(): void {
 let pointer: { pointerId: number; tool: Tool; x: number; y: number; startX: number; startY: number; hasDragged: boolean; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number; combStart?: { x: number; y: number } } | undefined;
 const activePointers = new Map<number, { x: number; y: number }>();
 let lastPinchDistance: number | undefined;
+function cancelActiveGesture(): void {
+  pointer = undefined;
+  activePointers.clear();
+  lastPinchDistance = undefined;
+  cursor.visible = false;
+  scissorsCursor.visible = false;
+  previewCutS = undefined;
+  updateOverlay();
+  highlightHair();
+  requestRender();
+}
+// A second finger can touch UI rather than the canvas, so observe the whole page.
+document.addEventListener('pointerdown', (event) => {
+  if (pointer && tool !== 'rotate' && event.pointerId !== pointer.pointerId) {
+    const isCanvas = event.target === renderer.domElement;
+    cancelActiveGesture();
+    // Do not let the second finger start a new canvas gesture.
+    if (isCanvas) event.stopPropagation();
+  }
+}, true);
+window.addEventListener('blur', cancelActiveGesture);
+window.addEventListener('pagehide', cancelActiveGesture);
+document.addEventListener('visibilitychange', () => { if (document.hidden) cancelActiveGesture(); });
 function pinchDistance(): number | undefined {
   const points = [...activePointers.values()];
   return points.length === 2 ? Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y) : undefined;
@@ -651,12 +674,7 @@ toolDrawer?.addEventListener('click', (event) => {
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => {
   button.addEventListener('click', () => {
     // A tool switch cancels any unfinished canvas gesture.
-    pointer = undefined;
-    activePointers.clear();
-    lastPinchDistance = undefined;
-    cursor.visible = false;
-    scissorsCursor.visible = false;
-    previewCutS = undefined;
+    cancelActiveGesture();
     tool = button.dataset.tool as Tool;
     document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((item) => item.classList.toggle('active', item.dataset.tool === tool));
     toolDrawer?.close();

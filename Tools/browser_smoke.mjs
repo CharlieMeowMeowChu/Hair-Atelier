@@ -202,11 +202,20 @@ try {
     await client.command('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...hairPoint, id: 1 }, { x: hairPoint.x + 35, y: hairPoint.y, id: 2 }] });
     await client.command('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     const afterSecondFinger = await evaluate(client, "document.querySelector('#status').textContent");
+    await client.command('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...hairPoint, id: 3 }] });
+    const outsidePoint = await evaluate(client, `(() => { const r = document.querySelector('#undo').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await client.command('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...hairPoint, id: 3 }, { ...outsidePoint, id: 4 }] });
+    await client.command('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    const afterOutsideFinger = await evaluate(client, "document.querySelector('#status').textContent");
     await client.command('Emulation.setTouchEmulationEnabled', { enabled: false });
+    await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', ...hairPoint, button: 'left', clickCount: 1 });
+    await evaluate(client, "window.dispatchEvent(new Event('blur'))");
+    await client.command('Input.dispatchMouseEvent', { type: 'mouseReleased', ...hairPoint, button: 'left', clickCount: 1 });
+    const afterBlur = await evaluate(client, "document.querySelector('#status').textContent");
     await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', ...hairPoint, button: 'left', clickCount: 1 });
     await client.command('Input.dispatchMouseEvent', { type: 'mouseReleased', ...hairPoint, button: 'left', clickCount: 1 });
     const afterTap = await evaluate(client, "document.querySelector('#status').textContent");
-    parsed.tapCancellationValid = !beforeRelease.includes('已對') && !afterCancel.includes('已對') && !afterSecondFinger.includes('已對') && afterTap.includes('已對');
+    parsed.tapCancellationValid = !beforeRelease.includes('已對') && !afterCancel.includes('已對') && !afterSecondFinger.includes('已對') && !afterOutsideFinger.includes('已對') && !afterBlur.includes('已對') && afterTap.includes('已對');
     await evaluate(client, "document.querySelector('#undo').click(); document.querySelector('[data-tool=rotate]').click()");
   }
   await client.command('Emulation.setDeviceMetricsOverride', { width: 820, height: 1180, deviceScaleFactor: 1, mobile: true });
