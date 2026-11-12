@@ -10,7 +10,7 @@ import { hasExceededDragThreshold } from './input-gesture';
 import { projectPointToArcSegment } from './line-arc';
 import { RecentMeasurements } from './performance-metrics';
 import { buildRibbonGeometryData } from './ribbon-geometry';
-import { keepHairOutsideEllipsoid } from './head-collision';
+import { constrainHairSamples } from './head-collision';
 import { readEditorHistory, writeEditorHistory } from './indexeddb-storage';
 
 const stage = document.querySelector<HTMLElement>('#stage');
@@ -175,7 +175,15 @@ function redraw(): void {
     const sampled = sampleStrandWithArcS(strand);
     // A curl may mathematically pass through the head. Constrain only the
     // rendered/pickable centreline so the visual hair stays outside the skull.
-    const renderedPoints = keepHairOutsideEllipsoid(sampled.map((sample) => sample.point), headCollider);
+    let renderedSamples: typeof sampled;
+    try {
+      renderedSamples = constrainHairSamples(sampled, headCollider);
+    } catch {
+      // A legacy root inside the head cannot be fixed without moving it.
+      // Preserve the saved data and render the original path instead of crashing.
+      renderedSamples = sampled;
+    }
+    const renderedPoints = renderedSamples.map((sample) => sample.point);
     const points = renderedPoints.map(([x, y, z]) => new Vector3(x, y, z));
     const geometry = new BufferGeometry().setFromPoints(points);
     const ribbonGeometry = createRibbonGeometry(renderedPoints);
@@ -184,12 +192,12 @@ function redraw(): void {
       existing.line.geometry = geometry;
       existing.ribbon.geometry.dispose();
       existing.ribbon.geometry = ribbonGeometry;
-      existing.line.userData = { strandId: strand.id, sampleS: sampled.map((sample) => sample.s) };
+      existing.line.userData = { strandId: strand.id, sampleS: renderedSamples.map((sample) => sample.s) };
       existing.signature = signature;
     } else {
       const material = new LineBasicMaterial({ color: colorForStrand(strand.id), linewidth: 1, transparent: true, opacity: 0, depthWrite: false });
       const line = new Line(geometry, material);
-      line.userData = { strandId: strand.id, sampleS: sampled.map((sample) => sample.s) };
+      line.userData = { strandId: strand.id, sampleS: renderedSamples.map((sample) => sample.s) };
       const ribbon = new Mesh(ribbonGeometry, new MeshBasicMaterial({
         color: colorForStrand(strand.id), side: DoubleSide, transparent: false, opacity: 1, depthWrite: true,
       }));
