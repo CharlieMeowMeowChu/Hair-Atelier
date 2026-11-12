@@ -141,7 +141,7 @@ try {
       overlayLabel: document.querySelector('#overlay div:nth-child(2) dt')?.textContent,
       status: document.querySelector('#status')?.textContent,
       touchTargetsValid: [...document.querySelectorAll('button, select')].every((element) => getComputedStyle(element).minHeight === '44px' || element.getBoundingClientRect().height >= 44),
-      stageTouchAction: getComputedStyle(document.querySelector('#stage')).touchAction,
+      stageTouchAction: document.querySelector('#stage') ? getComputedStyle(document.querySelector('#stage')).touchAction : undefined,
       errors: globalThis.__hairAtelierSmokeErrors ?? [],
     })`);
     const parsed = JSON.parse(state);
