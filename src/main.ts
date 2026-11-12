@@ -15,6 +15,7 @@ import { fullHairSamples, visibleHairSamples } from './visible-hair';
 import { readEditorHistory, StorageConflictError, writeEditorHistory, type StorageToken } from './indexeddb-storage';
 import { SaveQueue } from './save-queue';
 import { freeCurlInterval } from './curl-target';
+import { growthMessage } from './growth-message';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -397,10 +398,10 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     redraw();
     appStatus.textContent = `已選取 ${[...selectedStrandIds].join('、') || '無髮束'}`;
   } else if (tool === 'grow' && hit) {
-    editor.growBy(hit.id, 0.05);
-    persistState();
+    const result = editor.growBy(hit.id, 0.05);
+    if (result.changed) persistState();
     redraw();
-    appStatus.textContent = `已對 ${hit.id} 增長 5 cm`;
+    appStatus.textContent = growthMessage(result);
   } else if (tool === 'tuck' && hit) {
     const strand = editor.exportState().strands.find((item) => item.id === hit.id);
     const side = strand && strand.root[0] < 0 ? 'left' : 'right';
