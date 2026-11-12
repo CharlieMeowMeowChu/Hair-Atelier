@@ -14,7 +14,8 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-export interface StoredHistory { readonly value: string | undefined; readonly token: string | undefined }
+export interface StorageToken { readonly current: string | undefined; readonly legacy: string | undefined }
+export interface StoredHistory { readonly value: string | undefined; readonly token: StorageToken }
 export class StorageConflictError extends Error {}
 
 export async function readEditorHistory(): Promise<StoredHistory> {
@@ -24,9 +25,9 @@ export async function readEditorHistory(): Promise<StoredHistory> {
       const store = database.transaction(storeName, 'readonly').objectStore(storeName);
       const request = store.get(historyKey);
       request.onsuccess = () => {
-        if (request.result !== undefined) { resolve({ value: typeof request.result === 'string' ? request.result : '{invalid-storage', token: typeof request.result === 'string' ? request.result : '{invalid-storage' }); return; }
+        if (request.result !== undefined) { resolve({ value: typeof request.result === 'string' ? request.result : '{invalid-storage', token: { current: typeof request.result === 'string' ? request.result : '{invalid-storage', legacy: undefined } }); return; }
         const legacy = store.get(legacyHistoryKey);
-        legacy.onsuccess = () => resolve({ value: legacy.result === undefined ? undefined : typeof legacy.result === 'string' ? legacy.result : '{invalid-storage', token: undefined });
+        legacy.onsuccess = () => resolve({ value: legacy.result === undefined ? undefined : typeof legacy.result === 'string' ? legacy.result : '{invalid-storage', token: { current: undefined, legacy: legacy.result === undefined ? undefined : typeof legacy.result === 'string' ? legacy.result : '{invalid-storage' } });
         legacy.onerror = () => reject(legacy.error ?? new Error('Unable to read legacy IndexedDB'));
       };
       request.onerror = () => reject(request.error ?? new Error('Unable to read IndexedDB'));
@@ -36,7 +37,7 @@ export async function readEditorHistory(): Promise<StoredHistory> {
   }
 }
 
-export async function writeEditorHistory(serializedHistory: string, expectedToken: string | undefined): Promise<void> {
+export async function writeEditorHistory(serializedHistory: string, expectedToken: StorageToken): Promise<void> {
   const database = await openDatabase();
   try {
     await new Promise<void>((resolve, reject) => {
@@ -45,8 +46,13 @@ export async function writeEditorHistory(serializedHistory: string, expectedToke
       const request = store.get(historyKey);
       let conflict = false;
       request.onsuccess = () => {
-        if (request.result !== expectedToken) { conflict = true; transaction.abort(); return; }
-        store.put(serializedHistory, historyKey);
+        if (request.result !== expectedToken.current) { conflict = true; transaction.abort(); return; }
+        if (expectedToken.current !== undefined) { store.put(serializedHistory, historyKey); return; }
+        const legacy = store.get(legacyHistoryKey);
+        legacy.onsuccess = () => {
+          if (legacy.result !== expectedToken.legacy) { conflict = true; transaction.abort(); return; }
+          store.put(serializedHistory, historyKey);
+        };
       };
       transaction.oncomplete = () => resolve();
       transaction.onabort = () => reject(conflict ? new StorageConflictError('Storage changed in another tab') : transaction.error ?? new Error('Unable to write IndexedDB'));

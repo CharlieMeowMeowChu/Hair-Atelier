@@ -12,7 +12,7 @@ import { RecentMeasurements } from './performance-metrics';
 import { buildRibbonGeometryData } from './ribbon-geometry';
 import { buildVisibleRibbon } from './visible-ribbon';
 import { fullHairSamples, visibleHairSamples } from './visible-hair';
-import { readEditorHistory, StorageConflictError, writeEditorHistory } from './indexeddb-storage';
+import { readEditorHistory, StorageConflictError, writeEditorHistory, type StorageToken } from './indexeddb-storage';
 import { SaveQueue } from './save-queue';
 import { freeCurlInterval } from './curl-target';
 
@@ -39,7 +39,7 @@ const storageKey = 'hair-atelier.editor-history.v2';
 const legacyHistoryStorageKey = 'hair-atelier.editor-history.v1';
 const legacyStorageKey = 'hair-atelier.hair-state.v1';
 let storageProtected = false;
-let storageToken: string | undefined;
+let storageToken: StorageToken = { current: undefined, legacy: undefined };
 let storageConflict = false;
 let finishInitialStorageRead!: () => void;
 const initialStorageRead = new Promise<void>((resolve) => { finishInitialStorageRead = resolve; });
@@ -50,7 +50,7 @@ function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
     if (storageProtected) throw new Error('Existing storage is protected');
     try {
       await writeEditorHistory(snapshot, storageToken);
-      storageToken = snapshot;
+      storageToken = { current: snapshot, legacy: undefined };
     } catch (error) {
       if (error instanceof StorageConflictError) storageConflict = true;
       throw error;
@@ -61,7 +61,7 @@ function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
     return saved;
   });
 }
-async function loadPersistedEditor(): Promise<{ editor?: HairEditor; token?: string } | undefined> {
+async function loadPersistedEditor(): Promise<{ editor?: HairEditor; token: StorageToken } | undefined> {
   await saveQueue.settled();
   try {
     const read = await readEditorHistory();
