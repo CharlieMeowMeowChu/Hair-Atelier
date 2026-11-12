@@ -70,3 +70,41 @@ it('keeps the original ribbon surface when a curled non-grid tail grows beyond i
     expect(Math.min(...afterTriangles.map((triangle) => triangle.closestPointToPoint(p, nearest).distanceTo(p)))).toBeLessThanOrEqual(0.0005);
   }
 });
+
+it('restores extended straight and curled ribbons after saving, loading and redo', async () => {
+  const { parseEditorHistory } = await import('./hair-core');
+  for (const curled of [false, true]) {
+    const editor = new HairEditor(createDemoHairState());
+    if (curled) editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.7, direction: 1 });
+    editor.cutAt('C', 0.2);
+    editor.growBy('C', 0.463);
+    const render = (source: HairEditor) => {
+      const strand = source.exportState().strands.find((value) => value.id === 'C')!;
+      return buildVisibleRibbon(fullHairSamples(strand, head), strand.length, 0.006, head);
+    };
+    const original = render(editor);
+    const history = parseEditorHistory(JSON.stringify(editor.exportHistory()))!;
+    const reloaded = new HairEditor(history.current, history);
+    expect(render(reloaded)).toEqual(original);
+    reloaded.undo();
+    expect(reloaded.exportState().strands.find((value) => value.id === 'C')?.length).toBeCloseTo(0.2);
+    reloaded.redo();
+    expect(render(reloaded)).toEqual(original);
+  }
+});
+
+it('keeps small tight curls within 0.5 mm when extending a non-grid recorded tip', () => {
+  const editor = new HairEditor(createDemoHairState());
+  editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.005, pitch: 0.02, phase: 1.24, direction: -1 });
+  editor.growBy('C', 0.205);
+  const strand = () => editor.exportState().strands.find((item) => item.id === 'C')!;
+  const ribbon = () => buildVisibleRibbon(fullHairSamples(strand(), head), strand().length, 0.006, head);
+  const before = ribbon();
+  editor.growBy('C', 0.05);
+  const after = triangles(ribbon());
+  const nearest = new Vector3();
+  for (let i = 0; i < before.positions.length; i += 3) {
+    const p = new Vector3().fromArray(before.positions, i);
+    expect(Math.min(...after.map((triangle) => triangle.closestPointToPoint(p, nearest).distanceTo(p)))).toBeLessThanOrEqual(0.0005);
+  }
+});

@@ -4,9 +4,9 @@ import { constrainHairSamples, type EllipsoidCollider, type HairCollisionSample 
 /** Build the full material path independent of the visible cut length. */
 export function fullHairSamples(strand: GuideStrand, collider: EllipsoidCollider): HairCollisionSample[] {
   // A fixed material grid keeps previously displayed samples unchanged when
-  // the recorded tail is extended. Evaluate a complete final grid interval.
+  // the recorded tail is extended. Evaluate two intervals beyond the recorded tip so ribbon direction and width remain stable.
   const step = 0.01;
-  const segments = Math.max(40, Math.floor(strand.maximumLength / step + 1e-10) + 1);
+  const segments = Math.max(40, Math.floor(strand.maximumLength / step + 1e-10) + 2);
   const horizon = segments * step;
   const curls = strand.curls.map((curl, index) => index === strand.curls.length - 1 && curl.endS === strand.maximumLength
     ? { ...curl, endS: horizon } : curl);

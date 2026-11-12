@@ -7,7 +7,7 @@ const maximumWorkPerSnapshot = 200_000;
 export function canRenderSnapshot(state: HairState): boolean {
   let work = 0;
   for (const strand of state.strands) {
-    const samples = Math.max(40, Math.floor(strand.maximumLength / 0.01 + 1e-10) + 1);
+    const samples = Math.max(40, Math.floor(strand.maximumLength / 0.01 + 1e-10) + 2);
     work += (samples + 1) * (strand.curls.length + 1);
     if (!Number.isSafeInteger(work) || work > maximumWorkPerSnapshot) return false;
     if (strand.curls.some((curl) => !Number.isFinite(Math.PI * 2 * curl.radius) || !Number.isFinite(Math.hypot(Math.PI * 2 * curl.radius, curl.pitch)))) return false;
