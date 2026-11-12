@@ -518,6 +518,11 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     requestRender();
     return;
   }
+  if (tool === 'rotate' && activePointers.size > 1) {
+    renderer.domElement.setPointerCapture(event.pointerId);
+    lastPinchDistance = pinchDistance();
+    return;
+  }
   const hit = hitHair(event.clientX, event.clientY);
   const cuts = new Map<string, number>();
   const clippedIds = new Set<string>();
@@ -568,6 +573,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool !== 'rotate') return;
   const nextPinchDistance = pinchDistance();
+  if (activePointers.size > 1 && !(nextPinchDistance && lastPinchDistance)) return;
   if (nextPinchDistance && lastPinchDistance) {
     camera.position.z = MathUtils.clamp(camera.position.z - (nextPinchDistance - lastPinchDistance) * 0.0025, 0.72, 2.2);
     lastPinchDistance = nextPinchDistance;
@@ -581,8 +587,21 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   applyViewRotation();
 });
 function finishGesture(event: PointerEvent, cancelled = false): void {
+  if (!activePointers.has(event.pointerId)) return;
+  if (cancelled && tool === 'rotate') { cancelActiveGesture(); return; }
   activePointers.delete(event.pointerId);
   lastPinchDistance = pinchDistance();
+  if (pointer && tool === 'rotate' && pointer.tool === 'rotate' && activePointers.size > 0) {
+    // Rebase the surviving finger at its latest position, regardless of which
+    // finger ended first, to continue rotating without a jump.
+    if (activePointers.size === 1) {
+      const [remainingId, position] = activePointers.entries().next().value!;
+      pointer.pointerId = remainingId;
+      pointer.x = position.x;
+      pointer.y = position.y;
+    }
+    return;
+  }
   if (!pointer || event.pointerId !== pointer.pointerId) return;
   const gesture = pointer;
   pointer = undefined;
