@@ -367,7 +367,7 @@ function applyViewRotation(): void {
   headRig.rotation.set(rotationX, rotationY, 0);
   requestRender();
 }
-let pointer: { x: number; y: number; startX: number; startY: number; hasDragged: boolean; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number; combStart?: { x: number; y: number } } | undefined;
+let pointer: { pointerId: number; tool: Tool; x: number; y: number; startX: number; startY: number; hasDragged: boolean; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number; combStart?: { x: number; y: number } } | undefined;
 const activePointers = new Map<number, { x: number; y: number }>();
 let lastPinchDistance: number | undefined;
 function pinchDistance(): number | undefined {
@@ -388,7 +388,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   const hit = hitHair(event.clientX, event.clientY);
   const cuts = new Map<string, number>();
   const clippedIds = new Set<string>();
-  pointer = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, hasDragged: false, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
+  pointer = { pointerId: event.pointerId, tool, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, hasDragged: false, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
   renderer.domElement.setPointerCapture(event.pointerId);
   lastPinchDistance = pinchDistance();
   if (tool === 'select' && hit) {
@@ -502,7 +502,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
 });
 renderer.domElement.addEventListener('pointermove', (event) => {
   if (activePointers.has(event.pointerId)) activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-  if (!pointer) return;
+  if (!pointer || (tool !== 'rotate' && event.pointerId !== pointer.pointerId)) return;
   if (tool === 'cut') {
     if (!pointer.hasDragged && !hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) return;
     pointer.hasDragged = true;
@@ -556,7 +556,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
 function finishGesture(event: PointerEvent, cancelled = false): void {
   activePointers.delete(event.pointerId);
   lastPinchDistance = pinchDistance();
-  if (!pointer) return;
+  if (!pointer || event.pointerId !== pointer.pointerId) return;
   const gesture = pointer;
   pointer = undefined;
   cursor.visible = false;
@@ -564,7 +564,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
   previewCutS = undefined;
   updateOverlay();
   highlightHair();
-  if (cancelled) return;
+  if (cancelled || gesture.tool !== tool) { requestRender(); return; }
   if (tool === 'cut' && gesture.cuts.size > 0) {
     const targets = [...gesture.cuts].map(([strandId, arcLengthMeters]) => ({ strandId, arcLengthMeters }));
     const blocked = targets.map((target) => assessActionIntent(editor.exportState(), { type: 'cut', strandId: target.strandId, atS: target.arcLengthMeters }))
@@ -623,6 +623,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
 }
 renderer.domElement.addEventListener('pointerup', (event) => finishGesture(event));
 renderer.domElement.addEventListener('pointercancel', (event) => finishGesture(event, true));
+renderer.domElement.addEventListener('lostpointercapture', (event) => finishGesture(event, true));
 renderer.domElement.addEventListener('pointerleave', () => { if (!pointer) showCursor(undefined); });
 renderer.domElement.addEventListener('pointermove', (event) => { if (!pointer && tool !== 'rotate') showCursor(hitHair(event.clientX, event.clientY)); });
 
@@ -639,6 +640,13 @@ toolDrawer?.addEventListener('click', (event) => {
 
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => {
   button.addEventListener('click', () => {
+    // A tool switch cancels any unfinished canvas gesture.
+    pointer = undefined;
+    activePointers.clear();
+    lastPinchDistance = undefined;
+    cursor.visible = false;
+    scissorsCursor.visible = false;
+    previewCutS = undefined;
     tool = button.dataset.tool as Tool;
     document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((item) => item.classList.toggle('active', item.dataset.tool === tool));
     toolDrawer?.close();
