@@ -17,7 +17,7 @@ import { SaveQueue } from './save-queue';
 import { freeCurlInterval } from './curl-target';
 import { growthMessage } from './growth-message';
 import { nearestVisibleHairHit } from './occlusion';
-import { sweepStepPixels } from './sweep-sampling';
+import { clipSweepToBounds, sweepStepPixels } from './sweep-sampling';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -309,6 +309,7 @@ function preparePickContext(): PickContext {
 }
 function hitHair(clientX: number, clientY: number, context = preparePickContext()): HairHit | undefined {
   const { rect, lines, cameraPosition } = context;
+  if (rect.width <= 0 || rect.height <= 0 || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return undefined;
   const x = ((clientX - rect.left) / rect.width) * 2 - 1;
   const y = -((clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pickPosition.set(x, y), camera);
@@ -336,7 +337,10 @@ function hitHair(clientX: number, clientY: number, context = preparePickContext(
 }
 
 function sweepHits(fromX: number, fromY: number, toX: number, toY: number): HairHit[] {
-  const distance = Math.hypot(toX - fromX, toY - fromY);
+  const context = preparePickContext();
+  const clipped = clipSweepToBounds({ x: fromX, y: fromY }, { x: toX, y: toY }, context.rect);
+  if (!clipped) return [];
+  const distance = Math.hypot(clipped.to.x - clipped.from.x, clipped.to.y - clipped.from.y);
   // Use the smallest expected screen-space target across the head and visible
   // strand range, rather than a fixed gap that can skip narrow targets.
   const radius = MathUtils.clamp(0.014 * camera.position.z / 1.35, 0.01, 0.025);
@@ -344,10 +348,9 @@ function sweepHits(fromX: number, fromY: number, toX: number, toY: number): Hair
   const spacing = sweepStepPixels(radius, renderer.domElement.clientHeight, MathUtils.degToRad(camera.fov), maxDistance);
   const steps = Math.max(1, Math.ceil(distance / spacing));
   const hits: HairHit[] = [];
-  const context = preparePickContext();
-  for (let step = 1; step <= steps; step += 1) {
+  for (let step = 0; step <= steps; step += 1) {
     const t = step / steps;
-    const hit = hitHair(fromX + (toX - fromX) * t, fromY + (toY - fromY) * t, context);
+    const hit = hitHair(clipped.from.x + (clipped.to.x - clipped.from.x) * t, clipped.from.y + (clipped.to.y - clipped.from.y) * t, context);
     if (hit) hits.push(hit);
   }
   return hits;
