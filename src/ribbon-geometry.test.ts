@@ -38,19 +38,25 @@ describe('guide ribbon geometry', () => {
 
 it('keeps rendered ribbon triangles outside the demo head through curl, cut and growth', async () => {
   const { createDemoHairState, HairEditor } = await import('./hair-core');
-  const { visibleHairSamples } = await import('./visible-hair');
+  const { fullHairSamples } = await import('./visible-hair');
+  const { buildVisibleRibbon } = await import('./visible-ribbon');
+  const { Triangle, Vector3, Line3 } = await import('three');
   const collider = { center: [0, 0, 0] as const, radii: [0.22, 0.2464, 0.2024] as const, clearance: 0.018 };
   const editor = new HairEditor(createDemoHairState());
   const check = () => {
     for (const strand of editor.exportState().strands) {
-      const geometry = buildRibbonGeometryData(visibleHairSamples(strand, collider).map((sample) => sample.point), 0.006, collider);
+      const geometry = buildVisibleRibbon(fullHairSamples(strand, collider), strand.length, 0.006, collider);
       for (let i = 0; i < geometry.indices.length; i += 3) {
         const [a, b, c] = [0, 1, 2].map((j) => pointAt(geometry.positions, geometry.indices[i + j]));
-        for (let u = 0; u <= 10; u += 1) for (let v = 0; v <= 10 - u; v += 1) {
-          const w = 10 - u - v;
-          const point = a.map((value, n) => (value * u + b[n] * v + c[n] * w) / 10 / collider.radii[n]);
-          expect(Math.hypot(...point)).toBeGreaterThanOrEqual(1 - 1e-6);
-        }
+        const normalized = (p: number[]) => new Vector3(...p.map((value, n) => value / collider.radii[n]) as [number, number, number]);
+        const vertices = [a, b, c].map(normalized);
+        const triangle = new Triangle(...vertices as [InstanceType<typeof Vector3>, InstanceType<typeof Vector3>, InstanceType<typeof Vector3>]);
+        const origin = new Vector3();
+        const nearest = new Vector3();
+        const distance = triangle.getArea() > 1e-12
+          ? triangle.closestPointToPoint(origin, nearest).length()
+          : Math.min(...vertices.map((point, n) => point.distanceToSquared(vertices[(n + 1) % 3]) < 1e-20 ? point.length() : new Line3(point, vertices[(n + 1) % 3]).closestPointToPoint(origin, true, new Vector3()).length()));
+        expect(distance).toBeGreaterThanOrEqual(1 - 1e-6);
       }
     }
   };

@@ -39,3 +39,18 @@ describe('visible ribbon clipping', () => {
     verify();
   });
 });
+
+it('does not add degenerate triangles when a cut lands exactly on a sample', () => {
+  const farHead = { center: [100, 100, 100] as const, radii: [1, 1, 1] as const, clearance: 0 };
+  const samples = [
+    { s: 0, point: [0, 0, 0] as const },
+    { s: 0.1, point: [0, -0.1, 0] as const },
+    { s: 0.2, point: [0, -0.2, 0.03] as const },
+  ];
+  const output = buildVisibleRibbon(samples, 0.1, 0.006, farHead);
+  const surface = triangles(output);
+  expect(surface).toHaveLength(2);
+  expect(surface.every((triangle) => triangle.getArea() > 1e-8)).toBe(true);
+  const original = triangles(buildRibbonGeometryData(samples.map((sample) => sample.point), 0.006, farHead));
+  expect(surface.reduce((sum, triangle) => sum + triangle.getArea(), 0)).toBeCloseTo(original[0].getArea() + original[1].getArea(), 9);
+});

@@ -16,7 +16,7 @@ export function buildVisibleRibbon(samples: readonly HairCollisionSample[], leng
       const a = triangle[j], b = triangle[(j + 1) % triangle.length];
       const insideA = a.s <= length, insideB = b.s <= length;
       if (insideA) polygon.push(a);
-      if (insideA !== insideB) {
+      if (insideA !== insideB && a.s !== length && b.s !== length) {
         const t = (length - a.s) / (b.s - a.s);
         polygon.push({ s: length, p: [a.p[0] + (b.p[0] - a.p[0]) * t, a.p[1] + (b.p[1] - a.p[1]) * t, a.p[2] + (b.p[2] - a.p[2]) * t] });
       }
