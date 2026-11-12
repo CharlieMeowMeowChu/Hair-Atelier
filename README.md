@@ -18,7 +18,7 @@ npm run dev
 
 `npm run check` 執行核心不變條件測試、Service Worker 與 PWA shell 檢查、TypeScript production build，以及 production JS bundle 預算檢查（單一最大 bundle 上限 600 KB／gzip 150 KB）。瀏覽器開啟後可拖動旋轉，並可對 C 髮束執行「捲 C → 剪 C 到一半 → C 增長 → Undo」。畫面把 4 條 GuideStrand 衍生成最小 3D ribbon；未代表全頭髮、真人資產、精確剪刀拾取或真機效能已完成。
 
-目前核心使用 schema v3（沿用 v2 的弧長定義，新增捲髮取向版本）：`length` 與沿束 `s` 均為以米量度的 Rest centerline material arc length。存檔主體使用 IndexedDB；舊 IndexedDB v2 及 localStorage v1／v2 state／history 可兼容讀取；下次儲存或編輯時寫入 IndexedDB，舊資料不刪除。目前同版本多個分頁的寫入尚未協調，測試時請只開一個遊戲分頁。耳後、綁紮及辮子仍屬衍生 pose constraint。詳細邊界見 [拾取與約束契約](Docs/pick-and-constraint-contract.md)。
+目前核心使用 schema v3（沿用 v2 的弧長定義，新增捲髮取向版本）：`length` 與沿束 `s` 均為以米量度的 Rest centerline material arc length。存檔主體使用 IndexedDB；舊 IndexedDB v2 及 localStorage v1／v2 state／history 可兼容讀取；下次儲存或編輯時寫入 IndexedDB，舊資料不刪除。v3 同版本分頁使用原子比對防止舊資料覆寫；從 v2 首次升級時，請先關閉仍在編輯 v2 存檔的舊分頁。耳後、綁紮及辮子仍屬衍生 pose constraint。詳細邊界見 [拾取與約束契約](Docs/pick-and-constraint-contract.md)。
 
 GitHub Actions 在 PR 與合併至 `main` 後使用 `.nvmrc` 的 Node.js 24.19.0 重跑 `npm ci` 與 `npm run check`；feature branch 已有 PR 時不重複觸發同一份 push workflow。
 

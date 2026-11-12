@@ -101,6 +101,7 @@ let vite;
 let chrome;
 let profileDirectory;
 let client;
+let secondClient;
 const consoleErrors = [];
 try {
   vite = spawn('./node_modules/.bin/vite', ['--host', '127.0.0.1', '--port', String(serverPort), '--strictPort'], {
@@ -256,6 +257,26 @@ try {
   await storageWrite(indexedHistory, legacySerialized);
   await client.command('Page.navigate', { url: appUrl });
   await waitStatus('已自動讀取本機儲存與操作歷史');
+  const created = await client.command('Target.createTarget', { url: appUrl });
+  const secondTarget = (await (await waitFor(`${debugUrl}/json/list`)).json()).find((item) => item.id === created.targetId);
+  secondClient = new DevToolsClient(secondTarget.webSocketDebuggerUrl);
+  await secondClient.connect();
+  await secondClient.command('Runtime.enable');
+  const storageModule = `import('/src/indexeddb-storage.ts')`;
+  const firstRead = await evaluate(client, `${storageModule}.then(module => module.readEditorHistory())`);
+  const secondRead = await evaluate(secondClient, `${storageModule}.then(module => module.readEditorHistory())`);
+  await evaluate(client, `${storageModule}.then(module => module.writeEditorHistory(${JSON.stringify(indexedHistory + ' ')}, ${JSON.stringify(firstRead.token)}))`);
+  parsed.secondTabWriteRejected = await evaluate(secondClient, `${storageModule}.then(async module => {
+    try { await module.writeEditorHistory(${JSON.stringify(indexedHistory)}, ${JSON.stringify(secondRead.token)}); return false; }
+    catch (error) { return error instanceof module.StorageConflictError; }
+  })`);
+  const afterConflict = await evaluate(client, `${storageModule}.then(module => module.readEditorHistory())`);
+  parsed.secondTabWriteRejected = parsed.secondTabWriteRejected && afterConflict.value === indexedHistory + ' ';
+  secondClient.close();
+  secondClient = undefined;
+  await storageWrite(indexedHistory, legacySerialized);
+  await client.command('Page.navigate', { url: appUrl });
+  await waitStatus('已自動讀取本機儲存與操作歷史');
   parsed.serviceWorkerControlled = await evaluate(client, 'navigator.serviceWorker.ready.then(() => Boolean(navigator.serviceWorker.controller))');
   await client.command('Network.enable');
   await client.command('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
@@ -271,11 +292,12 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.corruptStorageProtected || !parsed.storageWarningVisible || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.corruptStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
+  secondClient?.close();
   client?.close();
   await stop(chrome);
   await stop(vite);

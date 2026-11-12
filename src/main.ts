@@ -12,7 +12,7 @@ import { RecentMeasurements } from './performance-metrics';
 import { buildRibbonGeometryData } from './ribbon-geometry';
 import { buildVisibleRibbon } from './visible-ribbon';
 import { fullHairSamples, visibleHairSamples } from './visible-hair';
-import { readEditorHistory, writeEditorHistory } from './indexeddb-storage';
+import { readEditorHistory, StorageConflictError, writeEditorHistory } from './indexeddb-storage';
 import { SaveQueue } from './save-queue';
 import { freeCurlInterval } from './curl-target';
 
@@ -39,6 +39,8 @@ const storageKey = 'hair-atelier.editor-history.v2';
 const legacyHistoryStorageKey = 'hair-atelier.editor-history.v1';
 const legacyStorageKey = 'hair-atelier.hair-state.v1';
 let storageProtected = false;
+let storageToken: string | undefined;
+let storageConflict = false;
 let finishInitialStorageRead!: () => void;
 const initialStorageRead = new Promise<void>((resolve) => { finishInitialStorageRead = resolve; });
 const saveQueue = new SaveQueue();
@@ -46,17 +48,24 @@ function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
   return saveQueue.save(JSON.stringify(candidate.exportHistory()), async (snapshot) => {
     await initialStorageRead;
     if (storageProtected) throw new Error('Existing storage is protected');
-    await writeEditorHistory(snapshot);
+    try {
+      await writeEditorHistory(snapshot, storageToken);
+      storageToken = snapshot;
+    } catch (error) {
+      if (error instanceof StorageConflictError) storageConflict = true;
+      throw error;
+    }
   }).then((saved) => {
-    if (!saved) showStorageWarning('儲存失敗，現有操作可能未保存。');
+    if (!saved) showStorageWarning(storageConflict ? '另一個分頁已更新存檔；目前操作未儲存，讀取存檔會取代目前操作。' : '儲存失敗，現有操作可能未保存。');
     else if (storageWarning && !storageProtected) storageWarning.hidden = true;
     return saved;
   });
 }
-async function loadPersistedEditor(): Promise<HairEditor | undefined> {
+async function loadPersistedEditor(): Promise<{ editor?: HairEditor; token?: string } | undefined> {
   await saveQueue.settled();
   try {
-    const stored = await readEditorHistory();
+    const read = await readEditorHistory();
+    const stored = read.value;
     const indexedHistory = parseEditorHistory(stored ?? '');
     if (stored !== undefined && !indexedHistory) {
       storageProtected = true;
@@ -64,7 +73,7 @@ async function loadPersistedEditor(): Promise<HairEditor | undefined> {
       showStorageWarning('本機存檔無法讀取，已暫停儲存以保護資料。');
       return undefined;
     }
-    if (indexedHistory) return new HairEditor(indexedHistory.current, indexedHistory);
+    if (indexedHistory) return { editor: new HairEditor(indexedHistory.current, indexedHistory), token: read.token };
     for (const key of [storageKey, legacyHistoryStorageKey]) {
       const raw = localStorage.getItem(key);
       if (raw === null) continue;
@@ -75,10 +84,10 @@ async function loadPersistedEditor(): Promise<HairEditor | undefined> {
         return undefined;
       }
       const restored = new HairEditor(history.current, history);
-      return restored;
+      return { editor: restored, token: read.token };
     }
     const rawLegacyState = localStorage.getItem(legacyStorageKey);
-    if (rawLegacyState === null) return undefined;
+    if (rawLegacyState === null) return { token: read.token };
     const legacyState = parseHairState(rawLegacyState);
     if (!legacyState) {
       storageProtected = true;
@@ -86,7 +95,7 @@ async function loadPersistedEditor(): Promise<HairEditor | undefined> {
       return undefined;
     }
     const restored = new HairEditor(legacyState);
-    return restored;
+    return { editor: restored, token: read.token };
   } catch {
     storageProtected = true;
     appStatus.textContent = '本機儲存暫時無法讀取，已暫停儲存以保護資料';
@@ -659,8 +668,10 @@ document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', ()
   const revision = saveQueue.revision;
   void loadPersistedEditor().then((restored) => {
     if (saveQueue.revision !== revision) { appStatus.textContent = '讀取期間髮型已改變，保留目前操作'; return; }
-    if (!restored) { if (!storageProtected) appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
-    editor = restored;
+    if (!restored?.editor) { if (!storageProtected) appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
+    storageToken = restored.token;
+    storageConflict = false;
+    editor = restored.editor;
     redraw();
     appStatus.textContent = '已讀取本機儲存與操作歷史';
   });
@@ -692,8 +703,10 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').ca
 redraw();
 const initialRevision = saveQueue.revision;
 void loadPersistedEditor().then((restored) => {
-  if (!restored || saveQueue.revision !== initialRevision) return;
-  editor = restored;
+  if (!restored) return;
+  storageToken = restored.token;
+  if (!restored.editor || saveQueue.revision !== initialRevision) return;
+  editor = restored.editor;
   redraw();
   appStatus.textContent = '已自動讀取本機儲存與操作歷史';
 }).finally(finishInitialStorageRead);
