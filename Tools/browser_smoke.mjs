@@ -177,6 +177,38 @@ try {
   await delay(100);
   parsed.toolSwitchCancelsGesture = await evaluate(client, "!document.querySelector('#status').textContent.includes('已移動分界')");
   await evaluate(client, "document.querySelector('[data-tool=rotate]').click()");
+  // Locate a visible strand using the actual selection tool, then verify
+  // an interrupted tap cannot grow it and a completed tap can.
+  const stageBounds = await evaluate(client, `(() => { const r = document.querySelector('#stage').getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; })()`);
+  let hairPoint;
+  await evaluate(client, "document.querySelector('[data-tool=select]').click()");
+  for (let y = stageBounds.top + 20; y < stageBounds.top + stageBounds.height - 50 && !hairPoint; y += 15) {
+    for (let x = stageBounds.left + 20; x < stageBounds.left + stageBounds.width - 20; x += 15) {
+      await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+      await client.command('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+      if (await evaluate(client, "document.querySelector('#status').textContent.includes('已選取')")) { hairPoint = { x, y }; break; }
+    }
+  }
+  parsed.tapCancellationValid = false;
+  if (hairPoint) {
+    await evaluate(client, "document.querySelector('[data-tool=grow]').click()");
+    await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', ...hairPoint, button: 'left', clickCount: 1 });
+    const beforeRelease = await evaluate(client, "document.querySelector('#status').textContent");
+    await evaluate(client, "document.querySelector('#stage canvas').dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1, bubbles: true }))");
+    await client.command('Input.dispatchMouseEvent', { type: 'mouseReleased', ...hairPoint, button: 'left', clickCount: 1 });
+    const afterCancel = await evaluate(client, "document.querySelector('#status').textContent");
+    await client.command('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
+    await client.command('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...hairPoint, id: 1 }] });
+    await client.command('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...hairPoint, id: 1 }, { x: hairPoint.x + 35, y: hairPoint.y, id: 2 }] });
+    await client.command('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    const afterSecondFinger = await evaluate(client, "document.querySelector('#status').textContent");
+    await client.command('Emulation.setTouchEmulationEnabled', { enabled: false });
+    await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', ...hairPoint, button: 'left', clickCount: 1 });
+    await client.command('Input.dispatchMouseEvent', { type: 'mouseReleased', ...hairPoint, button: 'left', clickCount: 1 });
+    const afterTap = await evaluate(client, "document.querySelector('#status').textContent");
+    parsed.tapCancellationValid = !beforeRelease.includes('已對') && !afterCancel.includes('已對') && !afterSecondFinger.includes('已對') && afterTap.includes('已對');
+    await evaluate(client, "document.querySelector('#undo').click(); document.querySelector('[data-tool=rotate]').click()");
+  }
   await client.command('Emulation.setDeviceMetricsOverride', { width: 820, height: 1180, deviceScaleFactor: 1, mobile: true });
   await delay(100);
   const tabletLayout = JSON.parse(await evaluate(client, `JSON.stringify({
@@ -312,10 +344,10 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.toolSwitchCancelsGesture || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.corruptStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.corruptStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
   secondClient?.close();
   client?.close();

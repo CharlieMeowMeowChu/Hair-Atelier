@@ -374,23 +374,7 @@ function pinchDistance(): number | undefined {
   const points = [...activePointers.values()];
   return points.length === 2 ? Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y) : undefined;
 }
-renderer.domElement.addEventListener('pointerdown', (event) => {
-  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-  if (activePointers.size > 1 && tool !== 'rotate') {
-    pointer = undefined;
-    cursor.visible = false;
-    scissorsCursor.visible = false;
-    previewCutS = undefined;
-    updateOverlay();
-    requestRender();
-    return;
-  }
-  const hit = hitHair(event.clientX, event.clientY);
-  const cuts = new Map<string, number>();
-  const clippedIds = new Set<string>();
-  pointer = { pointerId: event.pointerId, tool, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, hasDragged: false, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
-  renderer.domElement.setPointerCapture(event.pointerId);
-  lastPinchDistance = pinchDistance();
+function commitTap(tool: Tool, hit: HairHit): void {
   if (tool === 'select' && hit) {
     if (selectedStrandIds.has(hit.id)) selectedStrandIds.delete(hit.id);
     else selectedStrandIds.add(hit.id);
@@ -498,11 +482,31 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
     if (results.length > 0) persistState();
     redraw();
     appStatus.textContent = results.length > 0 ? `已將 ${results.length} 束髮撥向${side === 'left' ? '左' : '右'}側` : '髮束已在指定側';
-  } else if (tool !== 'rotate') showCursor(hit);
+  }
+}
+renderer.domElement.addEventListener('pointerdown', (event) => {
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (activePointers.size > 1 && tool !== 'rotate') {
+    pointer = undefined;
+    cursor.visible = false;
+    scissorsCursor.visible = false;
+    previewCutS = undefined;
+    updateOverlay();
+    requestRender();
+    return;
+  }
+  const hit = hitHair(event.clientX, event.clientY);
+  const cuts = new Map<string, number>();
+  const clippedIds = new Set<string>();
+  pointer = { pointerId: event.pointerId, tool, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, hasDragged: false, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
+  renderer.domElement.setPointerCapture(event.pointerId);
+  lastPinchDistance = pinchDistance();
+  if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {
   if (activePointers.has(event.pointerId)) activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (!pointer || (tool !== 'rotate' && event.pointerId !== pointer.pointerId)) return;
+  if (['select', 'grow', 'tuck', 'ponytail', 'halfup', 'pair', 'braid', 'sweep'].includes(tool) && hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) pointer.hasDragged = true;
   if (tool === 'cut') {
     if (!pointer.hasDragged && !hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) return;
     pointer.hasDragged = true;
@@ -565,6 +569,12 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
   updateOverlay();
   highlightHair();
   if (cancelled || gesture.tool !== tool) { requestRender(); return; }
+  const rect = renderer.domElement.getBoundingClientRect();
+  const releasedInside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  if (gesture.hit && releasedInside && !gesture.hasDragged && !hasExceededDragThreshold(gesture, { x: event.clientX, y: event.clientY }) && ['select', 'grow', 'tuck', 'ponytail', 'halfup', 'pair', 'braid', 'sweep'].includes(tool)) {
+    commitTap(tool, gesture.hit);
+    return;
+  }
   if (tool === 'cut' && gesture.cuts.size > 0) {
     const targets = [...gesture.cuts].map(([strandId, arcLengthMeters]) => ({ strandId, arcLengthMeters }));
     const blocked = targets.map((target) => assessActionIntent(editor.exportState(), { type: 'cut', strandId: target.strandId, atS: target.arcLengthMeters }))
