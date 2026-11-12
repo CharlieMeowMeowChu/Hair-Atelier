@@ -10,7 +10,7 @@ import { hasExceededDragThreshold } from './input-gesture';
 import { projectPointToArcSegment } from './line-arc';
 import { RecentMeasurements } from './performance-metrics';
 import { buildRibbonGeometryData } from './ribbon-geometry';
-import { constrainHairSamples } from './head-collision';
+import { visibleHairSamples } from './visible-hair';
 import { readEditorHistory, writeEditorHistory } from './indexeddb-storage';
 
 const stage = document.querySelector<HTMLElement>('#stage');
@@ -177,7 +177,7 @@ function redraw(): void {
     // rendered/pickable centreline so the visual hair stays outside the skull.
     let renderedSamples: typeof sampled;
     try {
-      renderedSamples = constrainHairSamples(sampled, headCollider);
+      renderedSamples = visibleHairSamples(strand, headCollider);
     } catch {
       // A legacy root inside the head cannot be fixed without moving it.
       // Preserve the saved data and render the original path instead of crashing.
