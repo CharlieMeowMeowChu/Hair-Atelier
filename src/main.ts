@@ -44,11 +44,13 @@ const legacyStorageKey = 'hair-atelier.hair-state.v1';
 let storageProtected = false;
 let storageToken: StorageToken = { current: undefined, legacy: undefined };
 let storageConflict = false;
+let hasUnsavedChanges = false;
 let finishInitialStorageRead!: () => void;
 const initialStorageRead = new Promise<void>((resolve) => { finishInitialStorageRead = resolve; });
 const saveQueue = new SaveQueue();
 function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
-  return saveQueue.save(JSON.stringify(candidate.exportHistory()), async (snapshot) => {
+  hasUnsavedChanges = true;
+  const result = saveQueue.save(JSON.stringify(candidate.exportHistory()), async (snapshot) => {
     await initialStorageRead;
     if (storageProtected) throw new Error('Existing storage is protected');
     try {
@@ -58,7 +60,10 @@ function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
       if (error instanceof StorageConflictError) storageConflict = true;
       throw error;
     }
-  }).then((saved) => {
+  });
+  const revision = saveQueue.revision;
+  return result.then((saved) => {
+    if (revision === saveQueue.revision) hasUnsavedChanges = !saved;
     if (!saved) showStorageWarning(storageConflict ? '另一個分頁已更新存檔；目前操作未儲存，讀取存檔會取代目前操作。' : '儲存失敗，現有操作可能未保存。');
     else if (storageWarning && !storageProtected) storageWarning.hidden = true;
     return saved;
@@ -744,16 +749,24 @@ document.querySelector<HTMLButtonElement>('#save')?.addEventListener('click', ()
   void persistState().then((saved) => { appStatus.textContent = saved ? '已儲存到本機瀏覽器' : '瀏覽器拒絕本機儲存'; });
 });
 document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', () => {
-  const revision = saveQueue.revision;
-  void loadPersistedEditor().then((restored) => {
+  void (async () => {
+    await saveQueue.settled();
+    if (hasUnsavedChanges && !window.confirm('目前髮型有未儲存的修改。讀取存檔會取代這些修改，繼續嗎？')) {
+      appStatus.textContent = '已取消讀取；保留目前髮型';
+      return;
+    }
+    const revision = saveQueue.revision;
+    const restored = await loadPersistedEditor();
     if (saveQueue.revision !== revision) { appStatus.textContent = '讀取期間髮型已改變，保留目前操作'; return; }
     if (!restored?.editor) { if (!storageProtected) appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
     storageToken = restored.token;
     storageConflict = false;
+    hasUnsavedChanges = false;
+    if (storageWarning && !storageProtected) storageWarning.hidden = true;
     editor = restored.editor;
     redraw();
     appStatus.textContent = '已讀取本機儲存與操作歷史';
-  });
+  })();
 });
 document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => {
   editor = new HairEditor(createDemoHairState());
