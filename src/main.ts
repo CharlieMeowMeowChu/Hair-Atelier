@@ -14,6 +14,7 @@ import { buildVisibleRibbon } from './visible-ribbon';
 import { fullHairSamples, visibleHairSamples } from './visible-hair';
 import { readEditorHistory, writeEditorHistory } from './indexeddb-storage';
 import { SaveQueue } from './save-queue';
+import { freeCurlInterval } from './curl-target';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -542,11 +543,15 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     const strand = editor.exportState().strands.find((item) => item.id === gesture.hit?.id);
     if (!strand) return;
     const direction = event.clientX - (gesture.curlStartX ?? event.clientX) >= 0 ? 1 : -1;
-    const startS = Math.max(0.01, gesture.hit.s - 0.04);
-    const result = editor.curlRange(strand.id, { startS, endS: strand.length, radius: 0.025, pitch: 0.08, phase: 0.3, direction });
+    const interval = freeCurlInterval(gesture.hit.s, strand.length, strand.curls);
+    if (!interval) {
+      appStatus.textContent = '所選位置已有捲曲；暫未支援重疊修改';
+      return;
+    }
+    const result = editor.curlRange(strand.id, { ...interval, radius: 0.025, pitch: 0.08, phase: 0.3, direction });
     if (result.changed) persistState();
     redraw();
-    appStatus.textContent = result.changed ? `已捲曲 ${strand.id} 的 ${Math.round(startS * 100)} cm 至髮尾` : result.reason ?? '未能建立捲曲';
+    appStatus.textContent = result.changed ? `已捲曲 ${strand.id} 的 ${Math.round(interval.startS * 100)} 至 ${Math.round(interval.endS * 100)} cm` : result.reason ?? '未能建立捲曲';
   }
   if (tool === 'comb' && gesture.hit && gesture.combStart) {
     const result = editor.combBy(gesture.hit.id, [
