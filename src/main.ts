@@ -13,6 +13,7 @@ import { buildRibbonGeometryData } from './ribbon-geometry';
 import { buildVisibleRibbon } from './visible-ribbon';
 import { fullHairSamples, visibleHairSamples } from './visible-hair';
 import { readEditorHistory, writeEditorHistory } from './indexeddb-storage';
+import { SaveQueue } from './save-queue';
 
 const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
@@ -30,15 +31,12 @@ const metrics = {
 const storageKey = 'hair-atelier.editor-history.v2';
 const legacyHistoryStorageKey = 'hair-atelier.editor-history.v1';
 const legacyStorageKey = 'hair-atelier.hair-state.v1';
-async function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
-  try {
-    await writeEditorHistory(JSON.stringify(candidate.exportHistory()));
-    return true;
-  } catch {
-    return false;
-  }
+const saveQueue = new SaveQueue();
+function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
+  return saveQueue.save(JSON.stringify(candidate.exportHistory()), writeEditorHistory);
 }
 async function loadPersistedEditor(): Promise<HairEditor | undefined> {
+  await saveQueue.settled();
   try {
     const indexedHistory = parseEditorHistory(await readEditorHistory() ?? '');
     if (indexedHistory) return new HairEditor(indexedHistory.current, indexedHistory);
@@ -46,13 +44,11 @@ async function loadPersistedEditor(): Promise<HairEditor | undefined> {
       const history = parseEditorHistory(localStorage.getItem(key) ?? '');
       if (!history) continue;
       const restored = new HairEditor(history.current, history);
-      await persistEditorHistory(restored);
       return restored;
     }
     const legacyState = parseHairState(localStorage.getItem(legacyStorageKey) ?? '');
     if (!legacyState) return undefined;
     const restored = new HairEditor(legacyState);
-    await persistEditorHistory(restored);
     return restored;
   } catch {
     return undefined;
@@ -616,7 +612,9 @@ document.querySelector<HTMLButtonElement>('#save')?.addEventListener('click', ()
   void persistState().then((saved) => { appStatus.textContent = saved ? '已儲存到本機瀏覽器' : '瀏覽器拒絕本機儲存'; });
 });
 document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', () => {
+  const revision = saveQueue.revision;
   void loadPersistedEditor().then((restored) => {
+    if (saveQueue.revision !== revision) { appStatus.textContent = '讀取期間髮型已改變，保留目前操作'; return; }
     if (!restored) { appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
     editor = restored;
     redraw();
@@ -648,8 +646,9 @@ new ResizeObserver(() => {
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => undefined);
 redraw();
+const initialRevision = saveQueue.revision;
 void loadPersistedEditor().then((restored) => {
-  if (!restored) return;
+  if (!restored || saveQueue.revision !== initialRevision) return;
   editor = restored;
   redraw();
   appStatus.textContent = '已自動讀取本機儲存與操作歷史';
