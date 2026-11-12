@@ -532,7 +532,8 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {
-  if (activePointers.has(event.pointerId)) activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (!activePointers.has(event.pointerId)) return;
+  activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (!pointer || (tool !== 'rotate' && event.pointerId !== pointer.pointerId)) return;
   if (['select', 'grow', 'tuck', 'ponytail', 'halfup', 'pair', 'braid', 'sweep'].includes(tool) && hasExceededDragThreshold(pointer, { x: event.clientX, y: event.clientY })) pointer.hasDragged = true;
   if (tool === 'cut') {
@@ -573,8 +574,8 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool !== 'rotate') return;
   const nextPinchDistance = pinchDistance();
-  if (activePointers.size > 1 && !(nextPinchDistance && lastPinchDistance)) return;
-  if (nextPinchDistance && lastPinchDistance) {
+  if (activePointers.size > 1 && (nextPinchDistance === undefined || lastPinchDistance === undefined)) return;
+  if (nextPinchDistance !== undefined && lastPinchDistance !== undefined) {
     camera.position.z = MathUtils.clamp(camera.position.z - (nextPinchDistance - lastPinchDistance) * 0.0025, 0.72, 2.2);
     lastPinchDistance = nextPinchDistance;
     requestRender();
