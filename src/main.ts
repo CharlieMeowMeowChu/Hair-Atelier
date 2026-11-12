@@ -146,7 +146,7 @@ scissorsCursor.visible = false;
 scene.add(scissorsCursor);
 
 function createRibbonGeometry(points: readonly Vec3[]): BufferGeometry {
-  const data = buildRibbonGeometryData(points, guideRibbonWidthMeters);
+  const data = buildRibbonGeometryData(points, guideRibbonWidthMeters, headCollider);
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
   geometry.setIndex(new BufferAttribute(data.indices, 1));

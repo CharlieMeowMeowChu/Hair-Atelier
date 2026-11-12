@@ -35,3 +35,30 @@ describe('guide ribbon geometry', () => {
     expect(buildRibbonGeometryData([[0, 0, 0], [0, -0.1, 0]], 0)).toEqual({ positions: new Float32Array(), indices: new Uint32Array() });
   });
 });
+
+it('keeps rendered ribbon triangles outside the demo head through curl, cut and growth', async () => {
+  const { createDemoHairState, HairEditor } = await import('./hair-core');
+  const { visibleHairSamples } = await import('./visible-hair');
+  const collider = { center: [0, 0, 0] as const, radii: [0.22, 0.2464, 0.2024] as const, clearance: 0.018 };
+  const editor = new HairEditor(createDemoHairState());
+  const check = () => {
+    for (const strand of editor.exportState().strands) {
+      const geometry = buildRibbonGeometryData(visibleHairSamples(strand, collider).map((sample) => sample.point), 0.006, collider);
+      for (let i = 0; i < geometry.indices.length; i += 3) {
+        const [a, b, c] = [0, 1, 2].map((j) => pointAt(geometry.positions, geometry.indices[i + j]));
+        for (let u = 0; u <= 10; u += 1) for (let v = 0; v <= 10 - u; v += 1) {
+          const w = 10 - u - v;
+          const point = a.map((value, n) => (value * u + b[n] * v + c[n] * w) / 10 / collider.radii[n]);
+          expect(Math.hypot(...point)).toBeGreaterThanOrEqual(1 - 1e-6);
+        }
+      }
+    }
+  };
+  check();
+  editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 });
+  check();
+  editor.cutAt('C', 0.1973);
+  check();
+  editor.growBy('C', 0.05);
+  check();
+});
