@@ -10,7 +10,8 @@ import { hasExceededDragThreshold } from './input-gesture';
 import { projectPointToArcSegment } from './line-arc';
 import { RecentMeasurements } from './performance-metrics';
 import { buildRibbonGeometryData } from './ribbon-geometry';
-import { visibleHairSamples } from './visible-hair';
+import { buildVisibleRibbon } from './visible-ribbon';
+import { fullHairSamples, visibleHairSamples } from './visible-hair';
 import { readEditorHistory, writeEditorHistory } from './indexeddb-storage';
 
 const stage = document.querySelector<HTMLElement>('#stage');
@@ -145,8 +146,8 @@ scissorsCursor.add(bladeA, bladeB, new Mesh(new CircleGeometry(0.006, 16), new M
 scissorsCursor.visible = false;
 scene.add(scissorsCursor);
 
-function createRibbonGeometry(points: readonly Vec3[]): BufferGeometry {
-  const data = buildRibbonGeometryData(points, guideRibbonWidthMeters, headCollider);
+function createRibbonGeometry(points: readonly Vec3[], fullSamples?: ReturnType<typeof fullHairSamples>, length = 0): BufferGeometry {
+  const data = fullSamples ? buildVisibleRibbon(fullSamples, length, guideRibbonWidthMeters, headCollider) : buildRibbonGeometryData(points, guideRibbonWidthMeters, headCollider);
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
   geometry.setIndex(new BufferAttribute(data.indices, 1));
@@ -176,8 +177,10 @@ function redraw(): void {
     // A curl may mathematically pass through the head. Constrain only the
     // rendered/pickable centreline so the visual hair stays outside the skull.
     let renderedSamples: typeof sampled;
+    let fullSamples: ReturnType<typeof fullHairSamples> | undefined;
     try {
-      renderedSamples = visibleHairSamples(strand, headCollider);
+      fullSamples = fullHairSamples(strand, headCollider);
+      renderedSamples = visibleHairSamples(strand, headCollider, fullSamples);
     } catch {
       // A legacy root inside the head cannot be fixed without moving it.
       // Preserve the saved data and render the original path instead of crashing.
@@ -186,7 +189,7 @@ function redraw(): void {
     const renderedPoints = renderedSamples.map((sample) => sample.point);
     const points = renderedPoints.map(([x, y, z]) => new Vector3(x, y, z));
     const geometry = new BufferGeometry().setFromPoints(points);
-    const ribbonGeometry = createRibbonGeometry(renderedPoints);
+    const ribbonGeometry = createRibbonGeometry(renderedPoints, fullSamples, strand.length);
     if (existing) {
       existing.line.geometry.dispose();
       existing.line.geometry = geometry;

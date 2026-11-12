@@ -1,11 +1,15 @@
 import { sampleStrandWithArcS, type GuideStrand } from './hair-core';
 import { constrainHairSamples, type EllipsoidCollider, type HairCollisionSample } from './head-collision';
 
-/** Route the whole recorded strand first, then clip at the current material length. */
-export function visibleHairSamples(strand: GuideStrand, collider: EllipsoidCollider): HairCollisionSample[] {
+/** Build the full material path independent of the visible cut length. */
+export function fullHairSamples(strand: GuideStrand, collider: EllipsoidCollider): HairCollisionSample[] {
   const full = { ...strand, length: strand.maximumLength };
   const segments = Math.max(40, Math.ceil(strand.maximumLength / 0.01));
-  const routed = constrainHairSamples(sampleStrandWithArcS(full, segments), collider);
+  return constrainHairSamples(sampleStrandWithArcS(full, segments), collider);
+}
+
+/** Clip the full path at the current material length. */
+export function visibleHairSamples(strand: GuideStrand, collider: EllipsoidCollider, routed = fullHairSamples(strand, collider)): HairCollisionSample[] {
   const visible: HairCollisionSample[] = [];
   for (const sample of routed) {
     if (sample.s <= strand.length) { visible.push(sample); continue; }
