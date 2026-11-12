@@ -197,6 +197,65 @@ try {
     if (parsed.indexedDbReloaded) break;
     await delay(100);
   }
+  // Exercise real IndexedDB upgrade and damaged-new-save protection in an isolated profile.
+  const legacyHistory = JSON.parse(indexedHistory);
+  legacyHistory.version = 2;
+  for (const snapshot of [legacyHistory.current, ...legacyHistory.undo, ...legacyHistory.redo]) snapshot.schemaVersion = 2;
+  const legacySerialized = JSON.stringify(legacyHistory);
+  const storageWrite = async (v3, v2) => evaluate(client, `new Promise((resolve, reject) => {
+    const open = indexedDB.open('hair-atelier', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result, tx = db.transaction('editor-history', 'readwrite'), store = tx.objectStore('editor-history');
+      ${v3 === undefined ? "store.delete('current-v3');" : `store.put(${JSON.stringify(v3)}, 'current-v3');`}
+      ${v2 === undefined ? "store.delete('current-v2');" : `store.put(${JSON.stringify(v2)}, 'current-v2');`}
+      tx.oncomplete = () => { db.close(); resolve(true); };
+      tx.onerror = () => reject(tx.error);
+    };
+  })`);
+  const waitStatus = async (expected) => {
+    const until = Date.now() + 10_000;
+    while (Date.now() < until) {
+      if (await evaluate(client, `document.querySelector('#status')?.textContent?.includes(${JSON.stringify(expected)}) ?? false`)) return true;
+      await delay(100);
+    }
+    return false;
+  };
+  await storageWrite(undefined, legacySerialized);
+  await client.command('Page.navigate', { url: appUrl });
+  parsed.legacyIndexedDbLoaded = await waitStatus('已自動讀取本機儲存與操作歷史');
+  await evaluate(client, "document.querySelector('#save').click()");
+  parsed.legacyUpgradeSaved = await waitStatus('已儲存到本機瀏覽器');
+  const upgradedKeys = JSON.parse(await evaluate(client, `new Promise((resolve, reject) => {
+    const open = indexedDB.open('hair-atelier', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result, tx = db.transaction('editor-history', 'readonly'), store = tx.objectStore('editor-history');
+      const v2 = store.get('current-v2'), v3 = store.get('current-v3');
+      tx.oncomplete = () => { db.close(); resolve(JSON.stringify({ v2: v2.result, v3: v3.result })); };
+      tx.onerror = () => reject(tx.error);
+    };
+  })`));
+  parsed.legacyUpgradeSaved = parsed.legacyUpgradeSaved && upgradedKeys.v2 === legacySerialized && JSON.parse(upgradedKeys.v3).version === 3;
+  await storageWrite('{damaged-v3', legacySerialized);
+  await client.command('Page.navigate', { url: appUrl });
+  parsed.corruptStorageProtected = await waitStatus('已暫停自動儲存以保護資料');
+  await evaluate(client, "document.querySelector('#reset').click(); document.querySelector('#save').click()");
+  await waitStatus('瀏覽器拒絕本機儲存');
+  parsed.storageWarningVisible = await evaluate(client, "!document.querySelector('#storage-warning').hidden");
+  const protectedValue = await evaluate(client, `new Promise((resolve, reject) => {
+    const open = indexedDB.open('hair-atelier', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result, request = db.transaction('editor-history', 'readonly').objectStore('editor-history').get('current-v3');
+      request.onsuccess = () => { db.close(); resolve(request.result); };
+      request.onerror = () => reject(request.error);
+    };
+  })`);
+  parsed.corruptStorageProtected = parsed.corruptStorageProtected && protectedValue === '{damaged-v3';
+  await storageWrite(indexedHistory, legacySerialized);
+  await client.command('Page.navigate', { url: appUrl });
+  await waitStatus('已自動讀取本機儲存與操作歷史');
   parsed.serviceWorkerControlled = await evaluate(client, 'navigator.serviceWorker.ready.then(() => Boolean(navigator.serviceWorker.controller))');
   await client.command('Network.enable');
   await client.command('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
@@ -212,10 +271,10 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.corruptStorageProtected || !parsed.storageWarningVisible || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
   client?.close();
   await stop(chrome);

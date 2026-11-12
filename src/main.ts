@@ -20,6 +20,12 @@ const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
 if (!stage || !status) throw new Error('Required UI is missing');
 const appStatus: HTMLElement = status;
+const storageWarning = document.querySelector<HTMLElement>('#storage-warning');
+function showStorageWarning(message: string): void {
+  if (!storageWarning) return;
+  storageWarning.textContent = message;
+  storageWarning.hidden = false;
+}
 const metrics = {
   selected: document.querySelector<HTMLElement>('#metric-selected'),
   length: document.querySelector<HTMLElement>('#metric-length'),
@@ -41,6 +47,10 @@ function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
     await initialStorageRead;
     if (storageProtected) throw new Error('Existing storage is protected');
     await writeEditorHistory(snapshot);
+  }).then((saved) => {
+    if (!saved) showStorageWarning('儲存失敗，現有操作可能未保存。');
+    else if (storageWarning && !storageProtected) storageWarning.hidden = true;
+    return saved;
   });
 }
 async function loadPersistedEditor(): Promise<HairEditor | undefined> {
@@ -51,22 +61,36 @@ async function loadPersistedEditor(): Promise<HairEditor | undefined> {
     if (stored !== undefined && !indexedHistory) {
       storageProtected = true;
       appStatus.textContent = '本機存檔無法讀取；已暫停自動儲存以保護資料';
+      showStorageWarning('本機存檔無法讀取，已暫停儲存以保護資料。');
       return undefined;
     }
     if (indexedHistory) return new HairEditor(indexedHistory.current, indexedHistory);
     for (const key of [storageKey, legacyHistoryStorageKey]) {
-      const history = parseEditorHistory(localStorage.getItem(key) ?? '');
-      if (!history) continue;
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      const history = parseEditorHistory(raw);
+      if (!history) {
+        storageProtected = true;
+        showStorageWarning('舊存檔無法讀取，已暫停儲存以保護資料。');
+        return undefined;
+      }
       const restored = new HairEditor(history.current, history);
       return restored;
     }
-    const legacyState = parseHairState(localStorage.getItem(legacyStorageKey) ?? '');
-    if (!legacyState) return undefined;
+    const rawLegacyState = localStorage.getItem(legacyStorageKey);
+    if (rawLegacyState === null) return undefined;
+    const legacyState = parseHairState(rawLegacyState);
+    if (!legacyState) {
+      storageProtected = true;
+      showStorageWarning('舊存檔無法讀取，已暫停儲存以保護資料。');
+      return undefined;
+    }
     const restored = new HairEditor(legacyState);
     return restored;
   } catch {
     storageProtected = true;
     appStatus.textContent = '本機儲存暫時無法讀取，已暫停儲存以保護資料';
+    showStorageWarning('本機儲存暫時無法讀取，已暫停儲存以保護資料。');
     return undefined;
   }
 }
