@@ -208,3 +208,13 @@ it('restores and samples zero-length saved strands through undo and redo', async
   editor.redo();
   expect(editor.exportState().strands[0].length).toBe(0.4);
 });
+
+it('rejects legacy migrations exceeding the prototype work budget before allocating samples', () => {
+  const huge = { schemaVersion: 1, strands: [{ ...testStrand(), length: 0.4, maximumLength: 1e100 }] };
+  expect(parseHairState(JSON.stringify(huge))).toBeUndefined();
+  expect(parseEditorHistory(JSON.stringify({ version: 1, current: huge, undo: [], redo: [] }))).toBeUndefined();
+  const legacy = { schemaVersion: 1, strands: [{ ...testStrand(), maximumLength: 10 }] };
+  expect(parseEditorHistory(JSON.stringify({ version: 1, current: legacy, undo: Array(20).fill(legacy), redo: [] }))).toBeDefined();
+  const many = { schemaVersion: 1, strands: [{ ...testStrand(), maximumLength: 30 }] };
+  expect(parseEditorHistory(JSON.stringify({ version: 1, current: many, undo: Array(20).fill(many), redo: Array(20).fill(many) }))).toBeUndefined();
+});

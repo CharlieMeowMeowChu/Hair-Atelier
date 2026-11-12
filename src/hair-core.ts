@@ -180,6 +180,7 @@ function legacyArcMap(strand: GuideStrand): readonly LegacyArcSample[] {
     const u = index === count ? strand.maximumLength : index * step;
     const point = legacyRestPointAt(strand, u);
     total += Math.hypot(point[0] - previousPoint[0], point[1] - previousPoint[1], point[2] - previousPoint[2]);
+    if (!Number.isFinite(total)) throw new Error('Legacy geometry is not finite');
     samples.push({ u, s: total });
     previousPoint = point;
   }
@@ -201,9 +202,28 @@ function sAtLegacyU(samples: readonly LegacyArcSample[], u: number): number {
   return span <= 0 ? before.s : before.s + (after.s - before.s) * ((target - before.u) / span);
 }
 
+// Bound work performed by the prototype's legacy migration. This is a safety
+// budget for reading old data, not a gameplay hair-length or strand limit.
+const legacyMigrationWorkBudget = 4_000_000;
+function legacyMigrationCost(value: unknown): number {
+  if (!value || typeof value !== 'object') return 0;
+  const state = value as { schemaVersion?: unknown; strands?: unknown };
+  if (state.schemaVersion !== 1) return 0;
+  if (!Array.isArray(state.strands)) return Infinity;
+  let work = 0;
+  for (const item of state.strands) {
+    if (!item || typeof item !== 'object') return Infinity;
+    const strand = item as { maximumLength?: unknown; curls?: unknown };
+    if (typeof strand.maximumLength !== 'number' || !Number.isFinite(strand.maximumLength) || strand.maximumLength < 0 || !Array.isArray(strand.curls)) return Infinity;
+    work += Math.max(1, Math.ceil(strand.maximumLength / 0.00025)) * (1 + strand.curls.length);
+    if (!Number.isSafeInteger(work) || work > legacyMigrationWorkBudget) return Infinity;
+  }
+  return work;
+}
+
 /** Converts persisted v1 parameter coordinates into v2 physical rest arc metres. */
 function migrateLegacyHairState(state: LegacyHairState): HairState | undefined {
-  if (!stateHasValidStrands(state.strands, false)) return undefined;
+  if (legacyMigrationCost(state) > legacyMigrationWorkBudget || !stateHasValidStrands(state.strands, false)) return undefined;
   const strands = state.strands.map((legacy) => {
     const samples = legacyArcMap(legacy);
     const maximumLength = samples.at(-1)!.s;
@@ -251,6 +271,8 @@ export function parseEditorHistory(serialized: string): EditorHistory | undefine
     const candidate = value as { version?: number; current?: unknown; undo?: unknown; redo?: unknown };
     if ((candidate.version !== 1 && candidate.version !== 2 && candidate.version !== 3) || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo) ||
       candidate.undo.length > 20 || candidate.redo.length > 20) return undefined;
+    const allStates = [candidate.current, ...candidate.undo, ...candidate.redo];
+    if (allStates.reduce<number>((sum, state) => sum + legacyMigrationCost(state), 0) > legacyMigrationWorkBudget) return undefined;
     const parseState = (state: unknown): HairState | undefined => parseHairState(JSON.stringify(state));
     const current = parseState(candidate.current);
     const undo = candidate.undo.map(parseState);
