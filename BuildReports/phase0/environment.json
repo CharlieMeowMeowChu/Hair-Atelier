@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "os": "Linux",
+  "machine": "x86_64",
+  "checks": {
+    "spec_unchanged": true,
+    "planning_documents": true
+  },
+  "spec_sha256": "8b49e95d73e497ccc16001d98b7e0beb4deb005f7d969a6709a75bc21fad9da3",
+  "tools": {
+    "git": {
+      "exit_code": 0,
+      "output": "git version 2.52.0"
+    },
+    "git_lfs": {
+      "exit_code": 0,
+      "output": "git-lfs/3.6.1 (GitHub; linux amd64; go 1.24.4)"
+    },
+    "blender": {
+      "exit_code": 0,
+      "output": "Blender 4.3.2"
+    },
+    "unity_executable": "/workspace/toolchains/unity-6000.3.27f1/Editor/Unity",
+    "unity_version": {
+      "exit_code": 0,
+      "output": "6000.3.27f1"
+    },
+    "xcode_on_path": null
+  },
+  "readiness": {
+    "repository_checks": "PASS",
+    "unity_project_build": "NOT_TESTED",
+    "apple_device_build": "NOT_TESTED"
+  },
+  "note": "Tool presence does not prove Unity licensing, project compilation or device support."
+}

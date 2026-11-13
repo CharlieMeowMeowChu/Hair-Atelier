@@ -1,0 +1,28 @@
+# Regenerable Unity data; preserve .meta files
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Bb]uild/
+[Bb]uilds/
+.vs/
+.idea/
+*.csproj
+*.sln
+# Local toolchains, raw private references, signing material
+.toolchains/
+PrivateReferences/
+*.p12
+*.pfx
+*.mobileprovision
+*.ulf
+.env
+.env.*
+__pycache__/
+*.pyc
+node_modules/
+dist/
+*.tsbuildinfo
+# Generated environment smoke fixtures
+BuildReports/phase0/generated/

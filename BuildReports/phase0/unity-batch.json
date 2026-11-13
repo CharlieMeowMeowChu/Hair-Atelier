@@ -1,0 +1,23 @@
+{
+  "scope": "Temporary empty project; no game functionality",
+  "command": [
+    "/workspace/toolchains/unity-6000.3.27f1/Editor/Unity",
+    "-batchmode",
+    "-nographics",
+    "-createProject",
+    "/tmp/hair-unity-env-1msmaurh/EmptyProject",
+    "-quit",
+    "-logFile",
+    "/tmp/hair-unity-env-1msmaurh/editor.log"
+  ],
+  "exit_code": 198,
+  "status": "BLOCKED_LICENSE",
+  "diagnostics": [
+    "[Licensing::Module] Error: Access token is unavailable; failed to update",
+    "[Licensing::Module] Error: 'com.unity.editor.headless' was not found.",
+    "[Licensing::Module] Error: 'com.unity.editor.headless' was not found.",
+    "No valid Unity Editor license found. Please activate your license."
+  ],
+  "project_version_file_created": false,
+  "note": "No license activated; no terms accepted. Raw logs remain local and are not published."
+}
