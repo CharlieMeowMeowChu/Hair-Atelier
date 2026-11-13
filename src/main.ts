@@ -367,7 +367,12 @@ function sweepHits(fromX: number, fromY: number, toX: number, toY: number): Hair
   // Use the smallest expected screen-space target across the head and visible
   // strand range, rather than a fixed gap that can skip narrow targets.
   const radius = MathUtils.clamp(0.014 * camera.position.z / 1.35, 0.01, 0.025);
-  const maxDistance = camera.position.length() + 1;
+  const maxDistance = Math.max(0.01, ...context.lines.map((line) => {
+    const sphere = line.geometry.boundingSphere;
+    if (!sphere) return 0;
+    const center = sphere.center.clone().applyMatrix4(line.matrixWorld);
+    return context.cameraPosition.distanceTo(center) + sphere.radius * line.matrixWorld.getMaxScaleOnAxis();
+  }));
   const spacing = sweepStepPixels(radius, renderer.domElement.clientHeight, MathUtils.degToRad(camera.fov), maxDistance);
   const steps = Math.max(1, Math.ceil(distance / spacing));
   const hits: HairHit[] = [];
