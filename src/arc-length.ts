@@ -103,16 +103,15 @@ function helixTangent(segment: HelixSegment, s: number): Vec3 {
   ), segment.axis);
 }
 
-function makeHelix(start: Vec3, startS: number, curl: CurlSegment, incomingTangent: Vec3): HelixSegment {
+function makeHelix(start: Vec3, startS: number, curl: CurlSegment, incomingTangent: Vec3, frameRoll?: number): HelixSegment {
   const circumference = Math.PI * 2 * curl.radius;
   const turnLength = Math.hypot(circumference, curl.pitch);
   const axisSpeed = curl.pitch / turnLength;
   const radialSpeed = circumference / turnLength;
   const baseQ = orthogonal(incomingTangent);
   // Legacy curls have no orientationMode and retain their original geometry.
-  const q = curl.orientationMode === 'phase-v1'
-    ? add(scale(baseQ, Math.cos(curl.phase)), scale(cross(incomingTangent, baseQ), Math.sin(curl.phase)))
-    : baseQ;
+  const roll = frameRoll ?? (curl.orientationMode === 'phase-v1' ? curl.phase : 0);
+  const q = add(scale(baseQ, Math.cos(roll)), scale(cross(incomingTangent, baseQ), Math.sin(roll)));
   const axis = normalize(add(scale(incomingTangent, axisSpeed), scale(q, radialSpeed)), incomingTangent);
   const radialAtStart = normalize(add(scale(incomingTangent, radialSpeed), scale(q, -axisSpeed)), q);
   const radialDerivativeBasis = scale(radialAtStart, curl.direction);
@@ -161,6 +160,35 @@ function buildSegments(strand: GuideStrand): readonly RestSegment[] {
     segments.push({ kind: 'line', startS: currentS, endS: strand.maximumLength, start: point, tangent });
   }
   return segments;
+}
+
+/**
+ * Derive a local frame for a continuation of an existing helix. The resulting
+ * roll is relative to the incoming tangent and can later be transported to a
+ * new tangent. Undefined means the frame is numerically too ill-conditioned.
+ * This helper does not mutate or serialize any hairstyle.
+ */
+export function curlContinuationFrame(strand: GuideStrand, splitS: number): { readonly roll: number; readonly tangent: Vec3; readonly point: Vec3 } | undefined {
+  if (!Number.isFinite(splitS)) return undefined;
+  const segment = buildSegments(strand).find((candidate): candidate is HelixSegment =>
+    candidate.kind === 'helix' && splitS > candidate.startS && splitS < candidate.endS);
+  if (!segment) return undefined;
+  const tangent = helixTangent(segment, splitS);
+  const projected = subtract(segment.axis, scale(tangent, tangent[0] * segment.axis[0] + tangent[1] * segment.axis[1] + tangent[2] * segment.axis[2]));
+  const projectedLength = length(projected);
+  if (!Number.isFinite(projectedLength) || projectedLength < 1e-8) return undefined;
+  const q = scale(projected, 1 / projectedLength);
+  const base = orthogonal(tangent);
+  const perpendicular = cross(tangent, base);
+  const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  return { roll: Math.atan2(dot(q, perpendicular), dot(q, base)), tangent, point: helixPoint(segment, splitS) };
+}
+
+/** Evaluate an unmodified helix continuation from a previously derived frame. */
+export function evaluateCurlContinuation(curl: CurlSegment, frame: { readonly roll: number; readonly tangent: Vec3; readonly point: Vec3 }, splitS: number, s: number): ArcLengthSample {
+  const segment = makeHelix(frame.point, splitS, curl, frame.tangent, frame.roll);
+  const clamped = Math.max(splitS, Math.min(s, curl.endS));
+  return { s: clamped, point: helixPoint(segment, clamped), tangent: helixTangent(segment, clamped) };
 }
 
 function clampS(s: number, maximumLength: number): number {

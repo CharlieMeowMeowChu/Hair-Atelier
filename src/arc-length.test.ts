@@ -251,3 +251,46 @@ it('extends a straight tail without extending a curl that ends before the record
   expect(dot(restTangentAt(grown, 0.6), restTangentAt(grown, 0.65))).toBeGreaterThan(0.999999);
   expect(distance(restPointAt(prior, 0.55), restPointAt(grown, 0.55))).toBeLessThan(1e-9);
 });
+
+describe('curl continuation frame', () => {
+  it('reconstructs an unmodified suffix at the same material coordinates', async () => {
+    const { curlContinuationFrame, evaluateCurlContinuation } = await import('./arc-length');
+    for (const direction of [-1, 1] as const) for (const phase of [0, 0.7, 2.4]) for (const orientationMode of [undefined, 'phase-v1'] as const) {
+      const curl = { startS: 0.04, endS: 0.35, radius: 0.025, pitch: 0.08, phase, direction, orientationMode };
+      const strand = testStrand({ curls: [curl] });
+      const split = 0.173;
+      const frame = curlContinuationFrame(strand, split);
+      expect(frame).toBeDefined();
+      for (let i = 0; i <= 40; i += 1) {
+        const s = split + (curl.endS - split) * i / 40;
+        const actual = evaluateCurlContinuation(curl, frame!, split, s);
+        expect(distance(actual.point, restPointAt(strand, s))).toBeLessThan(1e-9);
+        expect(dot(actual.tangent, restTangentAt(strand, s))).toBeGreaterThan(1 - 1e-9);
+      }
+    }
+  });
+  it('rejects absent and numerically unstable continuation frames', async () => {
+    const { curlContinuationFrame } = await import('./arc-length');
+    expect(curlContinuationFrame(testStrand(), 0.2)).toBeUndefined();
+    const strand = testStrand({ curls: [{ startS: 0.04, endS: 0.35, radius: 1e-20, pitch: 1, phase: 0, direction: 1 }] });
+    expect(curlContinuationFrame(strand, 0.2)).toBeUndefined();
+  });
+});
+
+it('preserves a continuation local shape when its incoming tangent changes', async () => {
+  const { curlContinuationFrame, evaluateCurlContinuation } = await import('./arc-length');
+  const curl = { startS: 0.04, endS: 0.35, radius: 0.025, pitch: 0.08, phase: 0.7, direction: -1 as const, orientationMode: 'phase-v1' as const };
+  const strand = testStrand({ curls: [curl] });
+  const split = 0.173;
+  const frame = curlContinuationFrame(strand, split)!;
+  const moved = { ...frame, point: [0.4, -0.2, 0.1] as Vec3, tangent: [0, 0, 1] as Vec3 };
+  const coordinates = [split, 0.2, 0.25, 0.3, 0.35];
+  const before = coordinates.map((s) => evaluateCurlContinuation(curl, frame, split, s));
+  const after = coordinates.map((s) => evaluateCurlContinuation(curl, moved, split, s));
+  for (let i = 0; i < coordinates.length; i += 1) for (let j = 0; j < coordinates.length; j += 1) {
+    expect(distance(before[i].point, before[j].point)).toBeCloseTo(distance(after[i].point, after[j].point), 9);
+    expect(dot(before[i].tangent, before[j].tangent)).toBeCloseTo(dot(after[i].tangent, after[j].tangent), 9);
+  }
+  expect(after[0].point).toEqual(moved.point);
+  expect(dot(after[0].tangent, moved.tangent)).toBeGreaterThan(1 - 1e-9);
+});
