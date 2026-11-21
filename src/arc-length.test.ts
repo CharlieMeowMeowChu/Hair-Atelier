@@ -111,8 +111,8 @@ describe('rest arc-length sampler', () => {
     const history = parseEditorHistory(JSON.stringify({ version: 1, current, undo: [undo], redo: [redo] }));
     const direct = parseHairState(JSON.stringify(current));
 
-    expect(direct?.schemaVersion).toBe(3);
-    expect(history?.version).toBe(3);
+    expect(direct?.schemaVersion).toBe(4);
+    expect(history?.version).toBe(4);
     expect(history?.undo).toHaveLength(1);
     expect(history?.redo).toHaveLength(1);
     expect(history!.current.strands[0].length).toBeGreaterThan(0.75);
@@ -183,7 +183,7 @@ it('upgrades v2 history snapshots without losing legacy or versioned curl geomet
   const transitional = testStrand({ curls: [{ ...legacy, orientationMode: 'phase-v1' }] });
   const oldState = (strand: GuideStrand) => ({ schemaVersion: 2, strands: [strand] });
   const parsed = parseEditorHistory(JSON.stringify({ version: 2, current: oldState(transitional), undo: [oldState(original)], redo: [oldState(transitional)] }));
-  expect(parsed?.version).toBe(3);
+  expect(parsed?.version).toBe(4);
   for (const [restored, expected] of [[parsed!.current.strands[0], transitional], [parsed!.undo[0].strands[0], original], [parsed!.redo[0].strands[0], transitional]] as const) {
     expect(restored.curls).toEqual(expected.curls);
     for (let i = 0; i <= 40; i += 1) expect(distance(restPointAt(restored, i / 100), restPointAt(expected, i / 100))).toBeLessThan(1e-10);

@@ -110,7 +110,7 @@ function makeHelix(start: Vec3, startS: number, curl: CurlSegment, incomingTange
   const radialSpeed = circumference / turnLength;
   const baseQ = orthogonal(incomingTangent);
   // Legacy curls have no orientationMode and retain their original geometry.
-  const roll = frameRoll ?? (curl.orientationMode === 'phase-v1' ? curl.phase : 0);
+  const roll = frameRoll ?? curl.frameRoll ?? (curl.orientationMode === 'phase-v1' ? curl.phase : 0);
   const q = add(scale(baseQ, Math.cos(roll)), scale(cross(incomingTangent, baseQ), Math.sin(roll)));
   const axis = normalize(add(scale(incomingTangent, axisSpeed), scale(q, radialSpeed)), incomingTangent);
   const radialAtStart = normalize(add(scale(incomingTangent, radialSpeed), scale(q, -axisSpeed)), q);

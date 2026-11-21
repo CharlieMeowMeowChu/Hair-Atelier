@@ -23,7 +23,7 @@ button { min-height: 44px; border: 0; border-radius: 12px; color: #261b24; backg
 button:active { transform: scale(.98); }
 button.secondary { color: #f7ecf5; background: #3d3442; }
 button.active { outline: 3px solid #85d8ff; outline-offset: 1px; background: #e3f6ff; }
-dialog { width: min(calc(100% - 28px), 600px); margin: auto; padding: 14px; border: 1px solid #65576a; border-radius: 18px; color: #fff8ff; background: #241e2a; box-shadow: 0 20px 70px #000c; }
+dialog { max-height: calc(100dvh - 28px); overflow-y: auto; width: min(calc(100% - 28px), 600px); margin: auto; padding: 14px; border: 1px solid #65576a; border-radius: 18px; color: #fff8ff; background: #241e2a; box-shadow: 0 20px 70px #000c; }
 dialog::backdrop { background: #0009; }
 .drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .drawer-heading button { min-width: 64px; }

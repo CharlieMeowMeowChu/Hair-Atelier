@@ -1,5 +1,5 @@
 import { assessActionIntent } from './constraint-graph';
-import { restPointAt } from './arc-length';
+import { curlContinuationFrame, restPointAt } from './arc-length';
 
 export type Vec3 = readonly [number, number, number];
 
@@ -11,6 +11,8 @@ export interface CurlSegment {
   readonly phase: number;
   readonly direction: -1 | 1;
   readonly orientationMode?: 'phase-v1';
+  /** Local orientation for a retained suffix after an interval edit. */
+  readonly frameRoll?: number;
 }
 
 export interface GuideStrand {
@@ -50,12 +52,12 @@ export interface BraidConstraint {
 
 export interface HairState {
   /** schema v2 defines every persisted s/length in physical rest arc metres. */
-  readonly schemaVersion: 3;
+  readonly schemaVersion: 4;
   readonly strands: readonly GuideStrand[];
 }
 
 export interface EditorHistory {
-  readonly version: 3;
+  readonly version: 4;
   readonly current: HairState;
   readonly undo: readonly HairState[];
   readonly redo: readonly HairState[];
@@ -119,7 +121,8 @@ function curlIsValid(value: unknown): value is CurlSegment {
   const curl = value as Partial<CurlSegment>;
   return Number.isFinite(curl.startS) && Number.isFinite(curl.endS) && Number.isFinite(curl.radius) && Number.isFinite(curl.pitch) && Number.isFinite(curl.phase) &&
     curl.startS! >= 0 && curl.endS! > curl.startS! && curl.radius! > 0 && curl.pitch! > 0 && (curl.direction === -1 || curl.direction === 1) &&
-    (curl.orientationMode === undefined || curl.orientationMode === 'phase-v1');
+    (curl.orientationMode === undefined || curl.orientationMode === 'phase-v1') &&
+    (curl.frameRoll === undefined || Number.isFinite(curl.frameRoll));
 }
 
 function strandIsValid(value: unknown, requirePhysicalRanges: boolean): value is GuideStrand {
@@ -245,7 +248,7 @@ function migrateLegacyHairState(state: LegacyHairState): HairState | undefined {
     } : undefined;
     return { ...legacy, length: visibleLength, maximumLength, curls, tie, braid };
   });
-  const migrated: HairState = { schemaVersion: 3, strands };
+  const migrated: HairState = { schemaVersion: 4, strands };
   return stateHasValidStrands(migrated.strands, true) ? copyState(migrated) : undefined;
 }
 
@@ -254,8 +257,9 @@ export function parseHairState(serialized: string): HairState | undefined {
     const value: unknown = JSON.parse(serialized);
     if (!value || typeof value !== 'object') return undefined;
     const candidate = value as { schemaVersion?: number; strands?: unknown };
-    if ((candidate.schemaVersion === 2 || candidate.schemaVersion === 3) && stateHasValidStrands(candidate.strands, true)) {
-      return copyState({ schemaVersion: 3, strands: candidate.strands });
+    if ((candidate.schemaVersion === 2 || candidate.schemaVersion === 3 || candidate.schemaVersion === 4) && stateHasValidStrands(candidate.strands, true)) {
+      if (candidate.schemaVersion < 4 && candidate.strands.some((strand) => strand.curls.some((curl) => curl.frameRoll !== undefined))) return undefined;
+      return copyState({ schemaVersion: 4, strands: candidate.strands });
     }
     if (candidate.schemaVersion === 1 && stateHasValidStrands(candidate.strands, false)) {
       return migrateLegacyHairState(candidate as LegacyHairState);
@@ -271,9 +275,10 @@ export function parseEditorHistory(serialized: string): EditorHistory | undefine
     const value: unknown = JSON.parse(serialized);
     if (!value || typeof value !== 'object') return undefined;
     const candidate = value as { version?: number; current?: unknown; undo?: unknown; redo?: unknown };
-    if ((candidate.version !== 1 && candidate.version !== 2 && candidate.version !== 3) || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo) ||
+    if ((candidate.version !== 1 && candidate.version !== 2 && candidate.version !== 3 && candidate.version !== 4) || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo) ||
       candidate.undo.length > 20 || candidate.redo.length > 20) return undefined;
     const allStates = [candidate.current, ...candidate.undo, ...candidate.redo];
+    if (allStates.some((state) => !state || typeof state !== 'object' || typeof (state as { schemaVersion?: unknown }).schemaVersion !== 'number' || (state as { schemaVersion: number }).schemaVersion > candidate.version!)) return undefined;
     if (allStates.reduce<number>((sum, state) => sum + legacyMigrationCost(state), 0) > legacyMigrationWorkBudget) return undefined;
     const parseState = (state: unknown): HairState | undefined => parseHairState(JSON.stringify(state));
     const current = parseState(candidate.current);
@@ -281,7 +286,7 @@ export function parseEditorHistory(serialized: string): EditorHistory | undefine
     const redo = candidate.redo.map(parseState);
     if (!current || undo.some((state) => !state) || redo.some((state) => !state)) return undefined;
     return {
-      version: 3,
+      version: 4,
       current,
       undo: undo as HairState[],
       redo: redo as HairState[],
@@ -375,7 +380,7 @@ export class HairEditor {
   public exportState(): HairState { return copyState(this.state); }
   public exportHistory(): EditorHistory {
     return {
-      version: 3,
+      version: 4,
       current: this.exportState(),
       undo: this.undoStack.map(copyState),
       redo: this.redoStack.map(copyState),
@@ -555,18 +560,21 @@ export class HairEditor {
     }
     const visibleEndS = Math.min(curl.endS, strand.length);
     if (curl.startS >= visibleEndS) return { changed: false, reason: 'Curl range is outside current strand', strandId };
-    const limited = { ...curl, orientationMode: 'phase-v1' as const, endS: visibleEndS >= strand.length - 1e-9 ? strand.maximumLength : visibleEndS };
+    const limited = { ...curl, frameRoll: undefined, orientationMode: 'phase-v1' as const, endS: visibleEndS >= strand.length - 1e-9 ? strand.maximumLength : visibleEndS };
     const constraint = assessActionIntent(this.state, { type: 'curl', strandId, startS: limited.startS, endS: visibleEndS });
     if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
-    // A retained suffix would require storing its transported frame. Do not
-    // silently rebuild it with a different shape until that is supported.
-    if (strand.curls.some((existing) => limited.startS < existing.endS && limited.endS > existing.startS && existing.endS > limited.endS)) {
-      return { changed: false, reason: '暫未支援只重捲原有捲曲的中間部分', strandId };
-    }
     const retained: CurlSegment[] = [];
     for (const existing of strand.curls) {
-      if (existing.endS <= limited.startS || existing.startS >= limited.endS) retained.push(existing);
-      else if (existing.startS < limited.startS) retained.push({ ...existing, endS: limited.startS });
+      if (existing.endS <= limited.startS || existing.startS >= limited.endS) {
+        retained.push(existing);
+        continue;
+      }
+      if (existing.startS < limited.startS) retained.push({ ...existing, endS: limited.startS });
+      if (existing.endS > limited.endS) {
+        const frame = curlContinuationFrame(strand, limited.endS);
+        if (!frame) return { changed: false, reason: '無法安全保留原有捲髮後段', strandId };
+        retained.push({ ...existing, startS: limited.endS, frameRoll: frame.roll });
+      }
     }
     this.saveUndo();
     const curls = [...retained, limited].sort((a, b) => a.startS - b.startS);
@@ -620,7 +628,7 @@ export function createDemoHairState(): HairState {
     A: [-0.12, 0.22, 0], B: [-0.04, 0.25, 0.04], C: [0.05, 0.25, 0.05], D: [0.13, 0.2, 0],
   };
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     strands: Object.entries(roots).map(([id, root]) => ({
       id, root, direction: [0, -1, 0], length: id === 'C' ? 0.4 : 0.3,
       maximumLength: id === 'C' ? 0.6 : 0.45, curls: [],

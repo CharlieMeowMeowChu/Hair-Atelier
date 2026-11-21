@@ -712,7 +712,9 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     const strand = editor.exportState().strands.find((item) => item.id === gesture.hit?.id);
     if (!strand) return;
     const direction = event.clientX - (gesture.curlStartX ?? event.clientX) >= 0 ? 1 : -1;
-    const interval = freeCurlInterval(gesture.hit.s, strand.length, strand.curls);
+    const spanSetting = document.querySelector<HTMLSelectElement>('#curl-span')?.value ?? 'auto';
+    const span = spanSetting === 'auto' ? undefined : Number(spanSetting);
+    const interval = freeCurlInterval(gesture.hit.s, strand.length, strand.curls, span);
     if (!interval) {
       appStatus.textContent = '未能選取可捲曲的範圍';
       return;

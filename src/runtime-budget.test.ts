@@ -7,7 +7,7 @@ describe('prototype render preflight', () => {
     const state = createDemoHairState();
     const before = JSON.stringify(state);
     const zero: HairState = { ...state, strands: [{ ...state.strands[0], length: 0, maximumLength: 0 }] };
-    expect(canRenderHistory({ version: 3, current: state, undo: [zero], redo: [] })).toBe(true);
+    expect(canRenderHistory({ version: 4, current: state, undo: [zero], redo: [] })).toBe(true);
     expect(JSON.stringify(state)).toBe(before);
   });
   it('rejects excessive work and overflow in any saved snapshot', () => {

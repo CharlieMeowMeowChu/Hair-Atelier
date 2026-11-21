@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：20 test files、98 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：20 test files、104 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
@@ -40,7 +40,7 @@
 | 最小 Guide ribbon | IMPLEMENTED | 每條 Rest arc sample 生成窄、雙面的 3D ribbon；以平行傳輸近似保持寬度，重複 sample 仍產生有限幾何。ribbon 只屬 render 衍生物，中心線仍是唯一可編輯資料；不是最終髮絲／髮片美術。 |
 | 局部幾何更新 | IMPLEMENTED | renderer 同時保留每條 GuideStrand 的不可見 Line 拾取中心線與可見 ribbon；只替換資料 signature 改變的兩種 geometry，並在 overlay 顯示本次 rebuild 髮束數；移除的髮束會釋放 geometry/material；A–D 保留示範色，新增穩定 ID 會有決定性 fallback 色，支援日後擴至 20 條導引束 |
 | PWA 基礎 | IMPLEMENTED | manifest、內建 SVG app icon／favicon、iOS standalone／status-bar metadata；service worker 導航採 network-first、靜態資源 stale-while-revalidate，啟用時清理舊版本 cache；語法與行為模擬測試通過，未做離線或加入主畫面真機驗證 |
-| 本機儲存／讀取 | IMPLEMENTED | 每次有效髮型操作與 Undo／Redo 寫入 IndexedDB `hair-atelier/editor-history/current-v3`；現行存檔包含當前狀態及最多 20 步 Undo／Redo 歷史，讀取會驗證每個 history snapshot；舊 localStorage v2、v1 history 與 v1 single HairState 會兼容讀取，並在下次儲存或編輯時寫入 IndexedDB；舊 key 保留不刪除；未做 Safari 重開真機驗證 |
+| 本機儲存／讀取 | IMPLEMENTED | 每次有效髮型操作與 Undo／Redo 寫入 IndexedDB `hair-atelier/editor-history/current-v4`；現行存檔包含當前狀態及最多 20 步 Undo／Redo 歷史，讀取會驗證每個 history snapshot；舊 localStorage v2、v1 history 與 v1 single HairState 會兼容讀取，並在下次儲存或編輯時寫入 IndexedDB；舊 key 保留不刪除；未做 Safari 重開真機驗證 |
 
 ## 增長超出已記錄髮尾
 
@@ -48,7 +48,7 @@
 
 ## 重疊捲髮樣板
 
-可從已有捲曲中途重新捲到該段末端，保留所選位置之前的原始曲線；如新範圍只覆蓋原捲曲中段、需保留其後綴，暫時會拒絕，避免破壞未選區段。此限制仍需後續解決；不能視為完整支援任意局部重捲。
+支援選定有限長度重捲已有捲曲的中段，前綴世界座標保持、後綴保留局部捲曲幾何並接續新方向；後綴世界位置可以隨中段改變。v4 獨立存檔記錄後段取向，舊存檔沿用原算法。退化取向無法安全推導時會拒絕而保留資料；實際 iPhone／iPad 操作及完整造型驗收仍待驗證。
 
 ## 尚未通過／未聲稱完成
 

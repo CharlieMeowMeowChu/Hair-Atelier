@@ -15,3 +15,9 @@ describe('curl target selection', () => {
     expect(freeCurlInterval(0.4, 0.4, [])).toBeUndefined();
   });
 });
+
+it('selects a fixed-length interval inside an existing curl and clamps to the visible tip', () => {
+  expect(freeCurlInterval(0.22, 0.4, [curl], 0.05)).toEqual({ startS: 0.22, endS: 0.27 });
+  expect(freeCurlInterval(0.38, 0.4, [curl], 0.1)).toEqual({ startS: 0.38, endS: 0.4 });
+  expect(freeCurlInterval(0.2, 0.4, [curl], 0)).toBeUndefined();
+});
