@@ -714,7 +714,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
     const direction = event.clientX - (gesture.curlStartX ?? event.clientX) >= 0 ? 1 : -1;
     const interval = freeCurlInterval(gesture.hit.s, strand.length, strand.curls);
     if (!interval) {
-      appStatus.textContent = '所選位置已有捲曲；暫未支援重疊修改';
+      appStatus.textContent = '未能選取可捲曲的範圍';
       return;
     }
     const result = editor.curlRange(strand.id, { ...interval, radius: 0.025, pitch: 0.08, phase: 0.3, direction });

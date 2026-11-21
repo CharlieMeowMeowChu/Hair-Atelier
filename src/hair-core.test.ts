@@ -401,11 +401,11 @@ describe('multiple local curls', () => {
     expect(get().curls).toEqual([first, second]);
     expect(parseHairState(JSON.stringify(editor.exportState()))?.strands.find((strand) => strand.id === 'C')?.curls).toEqual([first, second]);
   });
-  it('rejects overlapping ranges and non-finite curl parameters without altering history', () => {
+  it('rejects unsupported middle overlaps and non-finite curl parameters without altering history', () => {
     const editor = new HairEditor(createDemoHairState());
     editor.curlRange('C', first);
     const before = canonicalState(editor.exportState());
-    expect(editor.curlRange('C', { ...second, startS: 0.1 }).changed).toBe(false);
+    expect(editor.curlRange('C', { ...second, startS: 0.1, endS: 0.11 }).changed).toBe(false);
     for (const key of ['startS', 'endS', 'radius', 'pitch', 'phase'] as const) {
       expect(editor.curlRange('C', { ...second, [key]: Number.NaN }).changed).toBe(false);
       expect(editor.curlRange('C', { ...second, [key]: Number.POSITIVE_INFINITY }).changed).toBe(false);
@@ -438,4 +438,26 @@ describe('undoable reset', () => {
     expect(editor.resetTo(createDemoHairState())).toBe(false);
     expect(editor.canUndo).toBe(false);
   });
+});
+
+it('re-curls the end of an existing curl while preserving its prefix and history', async () => {
+  const { restTangentAt } = await import('./arc-length');
+  const editor = new HairEditor(createDemoHairState());
+  editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 });
+  const initial = editor.exportState();
+  const strand = initial.strands.find((item) => item.id === 'C')!;
+  const prefix = Array.from({ length: 21 }, (_, i) => pointAt(strand, i * 0.01));
+  expect(editor.curlRange('C', { startS: 0.2, endS: 0.4, radius: 0.015, pitch: 0.05, phase: 0.8, direction: -1 }).changed).toBe(true);
+  const changed = editor.exportState();
+  const after = changed.strands.find((item) => item.id === 'C')!;
+  expect(after.curls).toHaveLength(2);
+  expect(after.curls[0].endS).toBe(0.2);
+  prefix.forEach((point, i) => expect(pointAt(after, i * 0.01)).toEqual(point));
+  const left = restTangentAt(after, 0.2 - 1e-6), right = restTangentAt(after, 0.2 + 1e-6);
+  expect(left.reduce((sum, value, i) => sum + value * right[i], 0)).toBeGreaterThan(0.999999);
+  expect(changed.strands.filter((item) => item.id !== 'C')).toEqual(initial.strands.filter((item) => item.id !== 'C'));
+  const history = parseEditorHistory(JSON.stringify(editor.exportHistory()))!;
+  const restored = new HairEditor(history.current, history);
+  restored.undo(); expect(restored.exportState()).toEqual(initial);
+  restored.redo(); expect(restored.exportState()).toEqual(changed);
 });

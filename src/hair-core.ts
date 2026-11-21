@@ -558,13 +558,18 @@ export class HairEditor {
     const limited = { ...curl, orientationMode: 'phase-v1' as const, endS: visibleEndS >= strand.length - 1e-9 ? strand.maximumLength : visibleEndS };
     const constraint = assessActionIntent(this.state, { type: 'curl', strandId, startS: limited.startS, endS: visibleEndS });
     if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
-    // Splitting an existing helix would require retaining its frame and phase;
-    // reject overlap until that representation exists instead of deleting it.
-    if (strand.curls.some((existing) => limited.startS < existing.endS && limited.endS > existing.startS)) {
-      return { changed: false, reason: '所選範圍已有捲曲；暫未支援重疊修改', strandId };
+    // A retained suffix would require storing its transported frame. Do not
+    // silently rebuild it with a different shape until that is supported.
+    if (strand.curls.some((existing) => limited.startS < existing.endS && limited.endS > existing.startS && existing.endS > limited.endS)) {
+      return { changed: false, reason: '暫未支援只重捲原有捲曲的中間部分', strandId };
+    }
+    const retained: CurlSegment[] = [];
+    for (const existing of strand.curls) {
+      if (existing.endS <= limited.startS || existing.startS >= limited.endS) retained.push(existing);
+      else if (existing.startS < limited.startS) retained.push({ ...existing, endS: limited.startS });
     }
     this.saveUndo();
-    const curls = [...strand.curls, limited].sort((a, b) => a.startS - b.startS);
+    const curls = [...retained, limited].sort((a, b) => a.startS - b.startS);
     this.state = replaceStrand(this.state, { ...strand, curls });
     return { changed: true, strandId, oldLength: strand.length, newLength: strand.length };
   }

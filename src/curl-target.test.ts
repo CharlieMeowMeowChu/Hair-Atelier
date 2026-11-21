@@ -9,8 +9,8 @@ describe('curl target selection', () => {
     expect(before?.endS).toBe(0.2);
     expect(freeCurlInterval(0.31, 0.4, [curl])).toEqual({ startS: 0.3, endS: 0.4 });
   });
-  it('rejects an existing curl and invalid positions', () => {
-    expect(freeCurlInterval(0.25, 0.4, [curl])).toBeUndefined();
+  it('targets the remaining part of an existing curl and rejects invalid positions', () => {
+    expect(freeCurlInterval(0.25, 0.4, [curl])).toEqual({ startS: 0.25, endS: 0.3 });
     expect(freeCurlInterval(Number.NaN, 0.4, [])).toBeUndefined();
     expect(freeCurlInterval(0.4, 0.4, [])).toBeUndefined();
   });
