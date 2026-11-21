@@ -1,12 +1,12 @@
 # Web Core Spike 驗證紀錄
 
-最新驗證：2026-11-12（香港）。分支：`phase0/environment-readiness`。
+最新驗證：2026-11-21（香港）。分支：`phase0/environment-readiness`。
 
 ## 已通過
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：20 test files、104 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：20 test files、106 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
@@ -50,11 +50,12 @@
 
 支援選定有限長度重捲已有捲曲的中段，前綴世界座標保持、後綴保留局部捲曲幾何並接續新方向；後綴世界位置可以隨中段改變。v4 獨立存檔記錄後段取向，舊存檔沿用原算法。桌面 Chromium smoke 實際透過畫布選取 C 髮束中段、選 5 cm 重捲，檢查三段捲髮資料、其他束不變、Undo／Redo、IndexedDB 與重載一致。退化取向無法安全推導時會拒絕而保留資料；實際 iPhone／iPad 操作及完整造型驗收仍待驗證。
 
-剪短後重捲到可見髮尾時，如已記錄的隱藏尾段包含捲曲，會保留該段資料；增長時接續恢復，其位置可隨前段重捲而改變。沒有隱藏捲曲紀錄時，現有髮尾捲曲延伸規則維持不變。
+剪短後重捲到可見髮尾時，會保留已記錄的隱藏尾段，無論原本是直髮還是捲髮；增長時接續恢復，其位置可隨前段重捲而改變。增長超過已記錄末端時，才按照該末端的直髮或捲髮形狀續長。
 
 ## 尚未通過／未聲稱完成
 
 - iPhone 16 Pro Max 曾由擁有人打開並初步操作較早版本；最新修改未在真機重新驗證，iPad A16、FPS、記憶體、離線與背景恢復仍為 NOT_TESTED。
+- 中段重捲可令修改區之前的髮片邊界因採樣切線重新計算而移動；已在桌面數值重現約 0.86 mm，超過 0.5 mm 對照尺度，需修正及重測。
 - Production build 的 Three.js 主 bundle 為約 518 KB（gzip 約 134 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。
 - 此原型已有命中高亮、頭部遮擋 raycast、拖掃補取樣及最小 Guide ribbon；另有未接入畫面的純 TypeScript PickProxy／ConstraintGraph 契約與單元測試。尚未提供密集髮束空間索引、髮束互相遮擋、最終髮絲／髮片材質或 ribbon LOD。這些仍須在後續 Gate 3／4 驗收。
 - 這是 4 條彩色 GuideStrand 與球體，不是全頭髮、真人模型、完整物理碰撞或完整馬尾／辮子系統；上表所列的馬尾、公主頭、兩束綁與三股辮只屬資料／互動原型。

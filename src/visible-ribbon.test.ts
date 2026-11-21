@@ -56,7 +56,8 @@ it('does not add degenerate triangles when a cut lands exactly on a sample', () 
 });
 
 it('keeps the original ribbon surface when a curled non-grid tail grows beyond its recording', () => {
-  const editor = new HairEditor(createDemoHairState());
+  const base = createDemoHairState();
+  const editor = new HairEditor({ ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, maximumLength: strand.length } : strand) });
   editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.7, direction: -1 });
   editor.growBy('C', 0.213);
   const strand = () => editor.exportState().strands.find((item) => item.id === 'C')!;
@@ -74,7 +75,8 @@ it('keeps the original ribbon surface when a curled non-grid tail grows beyond i
 it('restores extended straight and curled ribbons after saving, loading and redo', async () => {
   const { parseEditorHistory } = await import('./hair-core');
   for (const curled of [false, true]) {
-    const editor = new HairEditor(createDemoHairState());
+    const base = createDemoHairState();
+    const editor = new HairEditor({ ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, maximumLength: strand.length } : strand) });
     if (curled) editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.7, direction: 1 });
     editor.cutAt('C', 0.2);
     editor.growBy('C', 0.463);
@@ -94,7 +96,8 @@ it('restores extended straight and curled ribbons after saving, loading and redo
 });
 
 it('keeps small tight curls within 0.5 mm when extending a non-grid recorded tip', () => {
-  const editor = new HairEditor(createDemoHairState());
+  const base = createDemoHairState();
+  const editor = new HairEditor({ ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, maximumLength: strand.length } : strand) });
   editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.005, pitch: 0.02, phase: 1.24, direction: -1 });
   editor.growBy('C', 0.205);
   const strand = () => editor.exportState().strands.find((item) => item.id === 'C')!;

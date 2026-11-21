@@ -11,7 +11,8 @@ describe('visible ribbon under recorded-tail growth', () => {
     for (const radius of [0.005, 0.025, 0.04]) {
       for (const direction of [-1, 1] as const) {
         for (const extra of [0.2, 0.205, 0.213]) {
-          const editor = new HairEditor(createDemoHairState());
+          const base = createDemoHairState();
+          const editor = new HairEditor({ ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, maximumLength: strand.length } : strand) });
           expect(editor.curlRange('C', { startS: 0.04, endS: 0.4, radius, pitch: radius * 4, phase: 1.24, direction }).changed).toBe(true);
           expect(editor.growBy('C', extra).changed).toBe(true);
           const ribbon = () => {

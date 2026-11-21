@@ -220,7 +220,8 @@ it('rejects legacy migrations exceeding the prototype work budget before allocat
 });
 
 it('extends past the recorded end without changing the retained curl or breaking the tangent', () => {
-  const editor = new HairEditor(createDemoHairState());
+  const base = createDemoHairState();
+  const editor = new HairEditor({ ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, maximumLength: strand.length } : strand) });
   editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.7, direction: 1 });
   editor.growBy('C', 0.2);
   const before = editor.exportState().strands.find((strand) => strand.id === 'C')!;
