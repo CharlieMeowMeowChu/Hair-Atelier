@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Triangle, Vector3 } from 'three';
+import { Line3, Triangle, Vector3 } from 'three';
 import { createDemoHairState, HairEditor } from './hair-core';
 import { fullHairSamples } from './visible-hair';
 import { buildVisibleRibbon } from './visible-ribbon';
@@ -13,6 +13,53 @@ function triangles(geometry: RibbonGeometryData): Triangle[] {
   return result;
 }
 describe('visible ribbon clipping', () => {
+  it('keeps the prefix ribbon collision-safe and within 0.5 mm after a middle re-curl', () => {
+    const editor = new HairEditor(createDemoHairState());
+    expect(editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 }).changed).toBe(true);
+    const strand = () => editor.exportState().strands.find((value) => value.id === 'C')!;
+    const beforeSamples = fullHairSamples(strand(), head);
+    const before = buildVisibleRibbon(beforeSamples, 0.12, 0.006, head);
+    expect(editor.curlRange('C', { startS: 0.12, endS: 0.17, radius: 0.015, pitch: 0.05, phase: 0.8, direction: -1 }).changed).toBe(true);
+    const afterSamples = fullHairSamples(strand(), head);
+    const after = buildVisibleRibbon(afterSamples, 0.12, 0.006, head);
+    const afterFull = buildVisibleRibbon(afterSamples, strand().length, 0.006, head);
+    expect(new Vector3(...beforeSamples[16].point).distanceTo(new Vector3(...afterSamples[16].point))).toBeGreaterThan(0.0005);
+
+    // Check the whole triangle, not only its vertices: an edge or interior can cross the ellipsoid.
+    for (const geometry of [before, after, afterFull]) {
+      for (const triangle of triangles(geometry)) {
+        const normalized = [triangle.a, triangle.b, triangle.c].map((p) => new Vector3(
+          (p.x - head.center[0]) / head.radii[0],
+          (p.y - head.center[1]) / head.radii[1],
+          (p.z - head.center[2]) / head.radii[2],
+        ));
+        const scaled = new Triangle(normalized[0], normalized[1], normalized[2]);
+        const origin = new Vector3();
+        const distance = scaled.getArea() > 1e-12
+          ? scaled.closestPointToPoint(origin, new Vector3()).length()
+          : Math.min(...normalized.map((point, index) => {
+            const next = normalized[(index + 1) % 3];
+            return point.distanceToSquared(next) < 1e-20 ? point.length() : new Line3(point, next).closestPointToPoint(origin, true, new Vector3()).length();
+          }));
+        expect(distance).toBeGreaterThanOrEqual(1 - 1e-6);
+      }
+    }
+
+    // Compare in both directions so changes to the surface cannot be hidden by clipping.
+    const maxDistance = (source: RibbonGeometryData, target: RibbonGeometryData) => {
+      const targetTriangles = triangles(target);
+      const nearest = new Vector3();
+      let max = 0;
+      for (let i = 0; i < source.positions.length; i += 3) {
+        const point = new Vector3().fromArray(source.positions, i);
+        max = Math.max(max, Math.min(...targetTriangles.map((triangle) => triangle.closestPointToPoint(point, nearest).distanceTo(point))));
+      }
+      return max;
+    };
+    expect(maxDistance(before, after)).toBeLessThanOrEqual(0.0005);
+    expect(maxDistance(after, before)).toBeLessThanOrEqual(0.0005);
+  });
+
   it('keeps the cut and grown ribbon on the original curved surface, including undo and redo', () => {
     const editor = new HairEditor(createDemoHairState());
     editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 });

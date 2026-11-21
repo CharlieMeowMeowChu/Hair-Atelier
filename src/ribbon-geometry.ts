@@ -38,12 +38,14 @@ function normalize(value: Vec3, fallback: Vec3): Vec3 {
 }
 
 function tangentAt(points: readonly Vec3[], index: number): Vec3 {
-  for (let next = index + 1; next < points.length; next += 1) {
-    const direction = subtract(points[next], points[index]);
-    if (Math.hypot(...direction) > epsilon) return normalize(direction, [0, -1, 0]);
-  }
+  // Use the incoming segment so editing the following interval does not
+  // rotate the ribbon at an otherwise unchanged boundary.
   for (let previous = index - 1; previous >= 0; previous -= 1) {
     const direction = subtract(points[index], points[previous]);
+    if (Math.hypot(...direction) > epsilon) return normalize(direction, [0, -1, 0]);
+  }
+  for (let next = index + 1; next < points.length; next += 1) {
+    const direction = subtract(points[next], points[index]);
     if (Math.hypot(...direction) > epsilon) return normalize(direction, [0, -1, 0]);
   }
   return [0, -1, 0];

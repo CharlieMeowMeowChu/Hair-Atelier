@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：20 test files、106 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：20 test files、107 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
@@ -55,7 +55,7 @@
 ## 尚未通過／未聲稱完成
 
 - iPhone 16 Pro Max 曾由擁有人打開並初步操作較早版本；最新修改未在真機重新驗證，iPad A16、FPS、記憶體、離線與背景恢復仍為 NOT_TESTED。
-- 中段重捲可令修改區之前的髮片邊界因採樣切線重新計算而移動；已在桌面數值重現約 0.86 mm，超過 0.5 mm 對照尺度，需修正及重測。
+- 中段重捲令修改區之前的髮片邊界移位：改用入向切線後，0.12 m 網格邊界案例已通過前綴表面雙向距離 ≤0.5 mm 及頭顱三角面碰撞測試；但 0.043 m 非網格邊界仍可重現約 0.565 mm 移位，下一步需處理取樣邊界及相鄰碰撞安全寬度，不能聲稱所有局部重捲前綴均已保形。
 - Production build 的 Three.js 主 bundle 為約 518 KB（gzip 約 134 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。
 - 此原型已有命中高亮、頭部遮擋 raycast、拖掃補取樣及最小 Guide ribbon；另有未接入畫面的純 TypeScript PickProxy／ConstraintGraph 契約與單元測試。尚未提供密集髮束空間索引、髮束互相遮擋、最終髮絲／髮片材質或 ribbon LOD。這些仍須在後續 Gate 3／4 驗收。
 - 這是 4 條彩色 GuideStrand 與球體，不是全頭髮、真人模型、完整物理碰撞或完整馬尾／辮子系統；上表所列的馬尾、公主頭、兩束綁與三股辮只屬資料／互動原型。
