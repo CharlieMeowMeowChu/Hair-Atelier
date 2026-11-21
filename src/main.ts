@@ -18,6 +18,7 @@ import { freeCurlInterval } from './curl-target';
 import { growthMessage } from './growth-message';
 import { nearestVisibleHairHit } from './occlusion';
 import { clipSweepToBounds, sweepStepPixels } from './sweep-sampling';
+import { panCamera, type PanPosition } from './camera-pan';
 import { canRenderHistory } from './runtime-budget';
 
 const stage = document.querySelector<HTMLElement>('#stage');
@@ -314,7 +315,7 @@ function updateOverlay(): void {
 }
 
 function toolLabel(value: Tool): string {
-  return ({ rotate: '旋轉檢視', select: '選取：點按髮束加入或移除', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：套用至選取組別', halfup: '公主頭：套用至選取組別', pair: '兩束綁：先選取兩束或以上，再點按髮束', braid: '三股辮：需要選取三束', sweep: '側撥：點按任一髮束', grow: '增髮：點按髮束' })[value];
+  return ({ rotate: '單指旋轉，雙指移動畫面及縮放', select: '選取：點按髮束加入或移除', cut: '剪刀：拖過髮束後放手', clip: '電剪：拖掃髮束後放手', curl: '捲髮器：按住後向側拖', comb: '梳子：按住髮束拖動', part: '分界：在頭皮水平拖動', tuck: '夾耳後：點按髮束', ponytail: '馬尾：套用至選取組別', halfup: '公主頭：套用至選取組別', pair: '兩束綁：先選取兩束或以上，再點按髮束', braid: '三股辮：需要選取三束', sweep: '側撥：點按任一髮束', grow: '增髮：點按髮束' })[value];
 }
 
 interface PickContext { rect: DOMRect; lines: Line[]; cameraPosition: Vector3 }
@@ -433,10 +434,12 @@ function applyViewRotation(): void {
 let pointer: { pointerId: number; tool: Tool; x: number; y: number; startX: number; startY: number; hasDragged: boolean; hit?: HairHit; cuts: Map<string, number>; clippedIds: Set<string>; curlStartX?: number; combStart?: { x: number; y: number } } | undefined;
 const activePointers = new Map<number, { x: number; y: number }>();
 let lastPinchDistance: number | undefined;
+let lastPinchCenter: PanPosition | undefined;
 function cancelActiveGesture(): void {
   pointer = undefined;
   activePointers.clear();
   lastPinchDistance = undefined;
+  lastPinchCenter = undefined;
   cursor.visible = false;
   scissorsCursor.visible = false;
   previewCutS = undefined;
@@ -456,6 +459,10 @@ document.addEventListener('pointerdown', (event) => {
 window.addEventListener('blur', cancelActiveGesture);
 window.addEventListener('pagehide', cancelActiveGesture);
 document.addEventListener('visibilitychange', () => { if (document.hidden) cancelActiveGesture(); });
+function pinchCenter(): PanPosition | undefined {
+  const points = [...activePointers.values()];
+  return points.length === 2 ? { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 } : undefined;
+}
 function pinchDistance(): number | undefined {
   const points = [...activePointers.values()];
   return points.length === 2 ? Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y) : undefined;
@@ -584,6 +591,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   if (tool === 'rotate' && activePointers.size > 1) {
     renderer.domElement.setPointerCapture(event.pointerId);
     lastPinchDistance = pinchDistance();
+    lastPinchCenter = pinchCenter();
     return;
   }
   const hit = hitHair(event.clientX, event.clientY);
@@ -592,6 +600,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   pointer = { pointerId: event.pointerId, tool, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, hasDragged: false, hit, cuts, clippedIds, curlStartX: event.clientX, combStart: { x: event.clientX, y: event.clientY } };
   renderer.domElement.setPointerCapture(event.pointerId);
   lastPinchDistance = pinchDistance();
+  lastPinchCenter = pinchCenter();
   if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {
@@ -622,10 +631,17 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   if (tool === 'grow') { showCursor(hitHair(event.clientX, event.clientY)); return; }
   if (tool !== 'rotate') return;
   const nextPinchDistance = pinchDistance();
+  const nextPinchCenter = pinchCenter();
   if (activePointers.size > 1 && (nextPinchDistance === undefined || lastPinchDistance === undefined)) return;
   if (nextPinchDistance !== undefined && lastPinchDistance !== undefined) {
+    if (nextPinchCenter && lastPinchCenter) {
+      const pan = panCamera(camera.position, { x: nextPinchCenter.x - lastPinchCenter.x, y: nextPinchCenter.y - lastPinchCenter.y }, camera.position.z, MathUtils.degToRad(camera.fov), renderer.domElement.clientHeight);
+      camera.position.x = pan.x;
+      camera.position.y = pan.y;
+    }
     camera.position.z = MathUtils.clamp(camera.position.z - (nextPinchDistance - lastPinchDistance) * 0.0025, 0.72, 2.2);
     lastPinchDistance = nextPinchDistance;
+    lastPinchCenter = nextPinchCenter;
     requestRender();
     return;
   }
@@ -640,6 +656,7 @@ function finishGesture(event: PointerEvent, cancelled = false): void {
   if (cancelled && tool === 'rotate') { cancelActiveGesture(); return; }
   activePointers.delete(event.pointerId);
   lastPinchDistance = pinchDistance();
+  lastPinchCenter = pinchCenter();
   if (pointer && tool === 'rotate' && pointer.tool === 'rotate' && activePointers.size > 0) {
     // Rebase the surviving finger at its latest position, regardless of which
     // finger ended first, to continue rotating without a jump.
@@ -803,7 +820,7 @@ document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', (
 document.querySelector<HTMLButtonElement>('#front')?.addEventListener('click', () => {
   rotationX = 0;
   rotationY = 0;
-  camera.position.z = 1.35;
+  camera.position.set(0, 0.05, 1.35);
   applyViewRotation();
   appStatus.textContent = '已回到正面視角';
 });

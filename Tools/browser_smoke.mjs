@@ -193,6 +193,17 @@ try {
   await delay(100);
   parsed.zeroDistancePinchValid = zeroPinchBefore !== await screenshot(client);
   await client.command('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  // Equal two-finger translation pans without requiring a pinch.
+  await client.command('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 175, y: 330, id: 1 }, { x: 235, y: 330, id: 2 }] });
+  await delay(100);
+  const beforePan = await screenshot(client);
+  await client.command('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 175, y: 250, id: 1 }, { x: 235, y: 250, id: 2 }] });
+  await delay(100);
+  const afterPan = await screenshot(client);
+  await client.command('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  parsed.twoFingerPanValid = beforePan !== afterPan;
+  await evaluate(client, "document.querySelector('#front').click()");
+  await delay(100);
   // Switching tools while a canvas drag is in progress must cancel that drag.
   await client.command('Emulation.setTouchEmulationEnabled', { enabled: false });
   await evaluate(client, "document.querySelector('[data-tool=rotate]').click()");
@@ -406,6 +417,40 @@ try {
   parsed.unsavedLoadGuardValid = firstConflictWarned && loadCancelled && declinedConfirm && loadConfirmed && saveAfterLoad;
   secondClient.close();
   secondClient = undefined;
+  await client.command('Target.closeTarget', { targetId: created.targetId });
+  await client.command('Page.bringToFront');
+  await storageWrite(indexedHistory, legacySerialized);
+  await client.command('Page.navigate', { url: appUrl });
+  await waitStatus('已自動讀取本機儲存與操作歷史');
+  // Exercise the long-tail framing and an actual cut in the running app.
+  const longHistory = JSON.parse(indexedHistory);
+  const longC = longHistory.current.strands.find((strand) => strand.id === 'C');
+  longC.length = 2; longC.maximumLength = 2; longC.curls = [];
+  longHistory.undo = []; longHistory.redo = [];
+  await storageWrite(JSON.stringify(longHistory), legacySerialized);
+  await client.command('Page.navigate', { url: appUrl });
+  await waitStatus('已自動讀取本機儲存與操作歷史');
+  await evaluate(client, "document.querySelector('#front').click()");
+  const longStage = await evaluate(client, `(() => { const r = document.querySelector('#stage canvas').getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; })()`);
+  await client.command('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
+  const centerX = longStage.left + longStage.width / 2;
+  const startY = longStage.top + longStage.height * 0.75;
+  const drag = longStage.height * 0.48;
+  for (let i = 0; i < 4; i += 1) {
+    await client.command('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: centerX - 25, y: startY, id: 1 }, { x: centerX + 25, y: startY, id: 2 }] });
+    await client.command('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: centerX - 25, y: startY - drag, id: 1 }, { x: centerX + 25, y: startY - drag, id: 2 }] });
+    await client.command('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+  await client.command('Emulation.setTouchEmulationEnabled', { enabled: false });
+  await evaluate(client, "document.querySelector('[data-tool=cut]').click()");
+  const cameraY = Math.max(-2.2, 0.05 - 4 * drag * 2 * 1.35 * Math.tan(35 * Math.PI / 360) / longStage.height);
+  const focalPixels = longStage.height / (2 * Math.tan(35 * Math.PI / 360));
+  const tail = { x: centerX + 0.05 * focalPixels / 1.30, y: longStage.top + longStage.height / 2 + (cameraY - (0.25 - 1.8)) * focalPixels / 1.30 };
+  await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', ...tail, button: 'left', clickCount: 1 });
+  await client.command('Input.dispatchMouseEvent', { type: 'mouseReleased', x: tail.x + 12, y: tail.y, button: 'left', clickCount: 1 });
+  parsed.longTailPanCutValid = await evaluate(client, "document.querySelector('#status').textContent.includes('一次剪短') && document.querySelector('#status').textContent.includes('C')");
+  await evaluate(client, "document.querySelector('#undo').click()");
+  parsed.longTailPanCutValid &&= await evaluate(client, "document.querySelector('#status').textContent.includes('C：200 cm')");
   await storageWrite(indexedHistory, legacySerialized);
   await client.command('Page.navigate', { url: appUrl });
   await waitStatus('已自動讀取本機儲存與操作歷史');
@@ -424,10 +469,10 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.corruptStorageProtected || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.twoFingerPanValid || !parsed.longTailPanCutValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.corruptStorageProtected || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, twoFingerPanValid=${parsed.twoFingerPanValid}, longTailPanCutValid=${parsed.longTailPanCutValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
   secondClient?.close();
   client?.close();
