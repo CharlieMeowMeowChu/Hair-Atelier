@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoHairState, HairEditor, type HairState } from './hair-core';
 import { canRenderHistory } from './runtime-budget';
+import { fullHairGridSegments } from './visible-hair';
 
 describe('prototype render preflight', () => {
+  it('does not reject a previously allowed grid-work count solely because of denser sampling', () => {
+    for (const length of [0, 0.2, 0.4, 0.6, 0.605, 1, 2, 10, 100]) {
+      const oldSegments = Math.max(40, Math.floor(length / 0.01 + 1e-10) + 2);
+      expect(fullHairGridSegments(length) + 1).toBeLessThanOrEqual(2 * (oldSegments + 1));
+    }
+  });
   it('accepts ordinary and zero-length history without changing the data', () => {
     const state = createDemoHairState();
     const before = JSON.stringify(state);

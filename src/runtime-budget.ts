@@ -1,13 +1,16 @@
 import { sampleStrandWithArcS, type EditorHistory, type HairState } from './hair-core';
 import { restTangentAt } from './arc-length';
+import { fullHairGridSegments } from './visible-hair';
 
 // Prototype resource guard, not a gameplay hair-length or strand-count rule.
-const maximumWorkPerSnapshot = 200_000;
+// The finer grid doubles counted samples. Scale the guard so histories that
+// passed the previous 10 mm grid remain readable; this is not a device benchmark.
+const maximumWorkPerSnapshot = 400_000;
 
 export function canRenderSnapshot(state: HairState): boolean {
   let work = 0;
   for (const strand of state.strands) {
-    const samples = Math.max(40, Math.floor(strand.maximumLength / 0.01 + 1e-10) + 2);
+    const samples = fullHairGridSegments(strand.maximumLength);
     work += (samples + 1) * (strand.curls.length + 1);
     if (!Number.isSafeInteger(work) || work > maximumWorkPerSnapshot) return false;
     if (strand.curls.some((curl) => !Number.isFinite(Math.PI * 2 * curl.radius) || !Number.isFinite(Math.hypot(Math.PI * 2 * curl.radius, curl.pitch)))) return false;

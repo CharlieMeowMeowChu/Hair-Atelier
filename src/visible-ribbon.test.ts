@@ -12,7 +12,32 @@ function triangles(geometry: RibbonGeometryData): Triangle[] {
   for (let i = 0; i < geometry.indices.length; i += 3) result.push(new Triangle(point(geometry.indices[i]), point(geometry.indices[i + 1]), point(geometry.indices[i + 2])));
   return result;
 }
+function maxSurfaceDistance(source: RibbonGeometryData, target: RibbonGeometryData): number {
+  const targetTriangles = triangles(target);
+  const nearest = new Vector3();
+  let max = 0;
+  for (let i = 0; i < source.positions.length; i += 3) {
+    const point = new Vector3().fromArray(source.positions, i);
+    max = Math.max(max, Math.min(...targetTriangles.map((triangle) => triangle.closestPointToPoint(point, nearest).distanceTo(point))));
+  }
+  return max;
+}
 describe('visible ribbon clipping', () => {
+  it('keeps the non-grid prefix surface within 0.5 mm after re-curling', () => {
+    const editor = new HairEditor(createDemoHairState());
+    expect(editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 }).changed).toBe(true);
+    const strand = () => editor.exportState().strands.find((value) => value.id === 'C')!;
+    const beforeSamples = fullHairSamples(strand(), head);
+    const before = buildVisibleRibbon(beforeSamples, 0.043, 0.006, head);
+    expect(editor.curlRange('C', { startS: 0.043, endS: 0.093, radius: 0.025, pitch: 0.08, phase: 0.3, direction: -1 }).changed).toBe(true);
+    const afterSamples = fullHairSamples(strand(), head);
+    const after = buildVisibleRibbon(afterSamples, 0.043, 0.006, head);
+    expect(new Vector3(...beforeSamples.find((sample) => Math.abs(sample.s - 0.08) < 1e-9)!.point)
+      .distanceTo(new Vector3(...afterSamples.find((sample) => Math.abs(sample.s - 0.08) < 1e-9)!.point))).toBeGreaterThan(0.0005);
+    expect(maxSurfaceDistance(before, after)).toBeLessThanOrEqual(0.0005);
+    expect(maxSurfaceDistance(after, before)).toBeLessThanOrEqual(0.0005);
+  });
+
   it('keeps the prefix ribbon collision-safe and within 0.5 mm after a middle re-curl', () => {
     const editor = new HairEditor(createDemoHairState());
     expect(editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 }).changed).toBe(true);
@@ -23,7 +48,8 @@ describe('visible ribbon clipping', () => {
     const afterSamples = fullHairSamples(strand(), head);
     const after = buildVisibleRibbon(afterSamples, 0.12, 0.006, head);
     const afterFull = buildVisibleRibbon(afterSamples, strand().length, 0.006, head);
-    expect(new Vector3(...beforeSamples[16].point).distanceTo(new Vector3(...afterSamples[16].point))).toBeGreaterThan(0.0005);
+    expect(new Vector3(...beforeSamples.find((sample) => Math.abs(sample.s - 0.16) < 1e-9)!.point)
+      .distanceTo(new Vector3(...afterSamples.find((sample) => Math.abs(sample.s - 0.16) < 1e-9)!.point))).toBeGreaterThan(0.0005);
 
     // Check the whole triangle, not only its vertices: an edge or interior can cross the ellipsoid.
     for (const geometry of [before, after, afterFull]) {
@@ -46,18 +72,8 @@ describe('visible ribbon clipping', () => {
     }
 
     // Compare in both directions so changes to the surface cannot be hidden by clipping.
-    const maxDistance = (source: RibbonGeometryData, target: RibbonGeometryData) => {
-      const targetTriangles = triangles(target);
-      const nearest = new Vector3();
-      let max = 0;
-      for (let i = 0; i < source.positions.length; i += 3) {
-        const point = new Vector3().fromArray(source.positions, i);
-        max = Math.max(max, Math.min(...targetTriangles.map((triangle) => triangle.closestPointToPoint(point, nearest).distanceTo(point))));
-      }
-      return max;
-    };
-    expect(maxDistance(before, after)).toBeLessThanOrEqual(0.0005);
-    expect(maxDistance(after, before)).toBeLessThanOrEqual(0.0005);
+    expect(maxSurfaceDistance(before, after)).toBeLessThanOrEqual(0.0005);
+    expect(maxSurfaceDistance(after, before)).toBeLessThanOrEqual(0.0005);
   });
 
   it('keeps the cut and grown ribbon on the original curved surface, including undo and redo', () => {
