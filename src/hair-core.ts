@@ -560,7 +560,10 @@ export class HairEditor {
     }
     const visibleEndS = Math.min(curl.endS, strand.length);
     if (curl.startS >= visibleEndS) return { changed: false, reason: 'Curl range is outside current strand', strandId };
-    const limited = { ...curl, frameRoll: undefined, orientationMode: 'phase-v1' as const, endS: visibleEndS >= strand.length - 1e-9 ? strand.maximumLength : visibleEndS };
+    // A cut hides the recorded tail. Styling the visible tip must not silently
+    // replace a curl that is still recorded beyond it and can be grown back.
+    const hasHiddenCurl = strand.curls.some((existing) => existing.endS > visibleEndS + 1e-9 && existing.startS < strand.maximumLength);
+    const limited = { ...curl, frameRoll: undefined, orientationMode: 'phase-v1' as const, endS: visibleEndS >= strand.length - 1e-9 && !hasHiddenCurl ? strand.maximumLength : visibleEndS };
     const constraint = assessActionIntent(this.state, { type: 'curl', strandId, startS: limited.startS, endS: visibleEndS });
     if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
     const retained: CurlSegment[] = [];
