@@ -1,12 +1,12 @@
 # Web Core Spike 驗證紀錄
 
-最新驗證：2026-11-21（香港）。分支：`phase0/environment-readiness`。
+最新驗證：2026-11-23（香港）。分支：`phase0/environment-readiness`。
 
 ## 已通過
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：21 test files、110 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：21 test files、112 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
@@ -55,8 +55,9 @@
 ## 尚未通過／未聲稱完成
 
 - iPhone 16 Pro Max 曾由擁有人打開並初步操作較早版本；最新修改未在真機重新驗證，iPad A16、FPS、記憶體、離線與背景恢復仍為 NOT_TESTED。
-- 中段重捲令修改區之前的髮片邊界移位：改用入向切線及 5 mm 固定取樣後，原本偏移約 0.565 mm 的非網格案例通過；16 組指定起點與方向的前綴表面雙向採樣距離 ≤0.5 mm，完整髮片三角面亦通過頭顱碰撞測試。此矩陣不是所有捲曲參數的證明；相鄰段的碰撞安全寬度仍可能影響未修改前綴。
+- 中段重捲令修改區之前的髮片邊界移位：改用入向切線及 5 mm 固定取樣後，原本偏移約 0.565 mm 的非網格案例通過；16 組指定起點與方向的前綴表面雙向採樣距離 ≤0.5 mm，完整髮片三角面亦通過頭顱碰撞測試。相鄰段安全寬度改用獨立截面並共用細分接縫；原先合成案例的前段偏移約 2.35 mm，修正後保留前段，測試交界前、交界及交界後的裁剪與三角面防穿。此矩陣不是所有捲曲參數或裝置畫面的證明，接縫外觀與效能仍須真機驗證。
 - 加密取樣增加運算：本機 Node 單束路徑與髮片重建、預熱後各 30 次的中位數，0.4 m 為約 0.46→1.02 ms，2 m 為約 0.95→2.27 ms；分別由 63→123、203→403 個點。這不是瀏覽器或真機 FPS 測量，裝置效能仍待驗證。
+- 同機 Node 粗略比較接縫修正前後：0.4 m 中位數約 0.70→1.08 ms，2 m 約 1.14→2.13 ms；此兩個示範髮束各為 160／800 個可見三角形，測量受負載與執行期影響，不代表所有頭髮或 iPhone／iPad 效能。
 - Production build 的 Three.js 主 bundle 為約 518 KB（gzip 約 134 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。
 - 此原型已有命中高亮、頭部遮擋 raycast、拖掃補取樣及最小 Guide ribbon；另有未接入畫面的純 TypeScript PickProxy／ConstraintGraph 契約與單元測試。尚未提供密集髮束空間索引、髮束互相遮擋、最終髮絲／髮片材質或 ribbon LOD。這些仍須在後續 Gate 3／4 驗收。
 - 這是 4 條彩色 GuideStrand 與球體，不是全頭髮、真人模型、完整物理碰撞或完整馬尾／辮子系統；上表所列的馬尾、公主頭、兩束綁與三股辮只屬資料／互動原型。

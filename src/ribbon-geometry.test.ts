@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Line3, Triangle, Vector3 } from 'three';
 import { buildRibbonGeometryData } from './ribbon-geometry';
 
 function pointAt(data: Float32Array, vertex: number): [number, number, number] {
@@ -6,6 +7,33 @@ function pointAt(data: Float32Array, vertex: number): [number, number, number] {
 }
 
 describe('guide ribbon geometry', () => {
+  it('keeps the prior segment vertices fixed when the following segment approaches the head', () => {
+    const collider = { center: [0, 0, 0] as const, radii: [1, 1, 1] as const, clearance: 0.018 };
+    const polar = (radius: number, angle: number): [number, number, number] => [radius * Math.cos(angle), radius * Math.sin(angle), 0];
+    const p0 = polar(1.02, 0.05), p1 = polar(1.02, 0.1);
+    const before = buildRibbonGeometryData([p0, p1, polar(1.02, 0.15)], 0.006, collider);
+    const after = buildRibbonGeometryData([p0, p1, polar(1.018, -0.28)], 0.006, collider);
+    for (const geometry of [before, after]) {
+      for (let i = 0; i < geometry.indices.length; i += 3) {
+        const vertices = [0, 1, 2].map((j) => new Vector3(...pointAt(geometry.positions, geometry.indices[i + j])));
+        const triangle = new Triangle(vertices[0], vertices[1], vertices[2]);
+        const origin = new Vector3();
+        const distance = triangle.getArea() > 1e-12
+          ? triangle.closestPointToPoint(origin, new Vector3()).length()
+          : Math.min(...vertices.map((point, index) => {
+            const next = vertices[(index + 1) % 3];
+            return point.distanceToSquared(next) < 1e-20 ? point.length() : new Line3(point, next).closestPointToPoint(origin, true, new Vector3()).length();
+          }));
+        expect(distance).toBeGreaterThanOrEqual(1 - 1e-6);
+      }
+    }
+    for (let vertex = 0; vertex < 4; vertex += 1) {
+      const a = new Vector3(...pointAt(before.positions, vertex));
+      const b = new Vector3(...pointAt(after.positions, vertex));
+      expect(a.distanceTo(b)).toBeLessThanOrEqual(1e-7);
+    }
+  });
+
   it('creates paired vertices and triangles around a straight centreline', () => {
     const geometry = buildRibbonGeometryData([[0, 0, 0], [0, -0.2, 0], [0, -0.4, 0]], 0.006);
     expect(geometry.positions).toHaveLength(18);

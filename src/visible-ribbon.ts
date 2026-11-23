@@ -8,7 +8,7 @@ export function buildVisibleRibbon(samples: readonly HairCollisionSample[], leng
   type Vertex = { p: [number, number, number]; s: number };
   const positions: number[] = [];
   const indices: number[] = [];
-  const vertex = (index: number): Vertex => ({ p: [full.positions[index * 3], full.positions[index * 3 + 1], full.positions[index * 3 + 2]], s: samples[Math.floor(index / 2)].s });
+  const vertex = (index: number): Vertex => ({ p: [full.positions[index * 3], full.positions[index * 3 + 1], full.positions[index * 3 + 2]], s: samples[full.sampleIndices?.[index] ?? Math.floor(index / 2)].s });
   for (let i = 0; i < full.indices.length; i += 3) {
     const triangle = [vertex(full.indices[i]), vertex(full.indices[i + 1]), vertex(full.indices[i + 2])];
     const polygon: Vertex[] = [];

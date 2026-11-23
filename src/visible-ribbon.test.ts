@@ -23,6 +23,45 @@ function maxSurfaceDistance(source: RibbonGeometryData, target: RibbonGeometryDa
   return max;
 }
 describe('visible ribbon clipping', () => {
+  it('preserves the prior surface and clips correctly across a shared narrowed seam', () => {
+    const collider = { center: [0, 0, 0] as const, radii: [1, 1, 1] as const, clearance: 0.018 };
+    const polar = (r: number, theta: number): [number, number, number] => [r * Math.cos(theta), r * Math.sin(theta), 0];
+    const p0 = polar(1.02, 0.05), p1 = polar(1.02, 0.1);
+    const previous = [{ s: 0, point: p0 }, { s: 0.5, point: p1 }, { s: 1, point: polar(1.02, 0.15) }];
+    const next = [{ s: 0, point: p0 }, { s: 0.5, point: p1 }, { s: 1, point: polar(1.018, -0.28) }];
+    const full = buildRibbonGeometryData(next.map((sample) => sample.point), 0.006, collider);
+    expect(full.sampleIndices).toBeDefined();
+    const junctionVertices = [...full.sampleIndices!].map((sample, vertex) => ({ sample, vertex }))
+      .filter(({ sample, vertex }) => sample === 1 && vertex >= next.length * 2).map(({ vertex }) => vertex);
+    expect(junctionVertices).toHaveLength(2);
+    for (const vertex of junctionVertices) {
+      const attachedSamples = new Set<number>();
+      for (let i = 0; i < full.indices.length; i += 3) {
+        const triangle = [...full.indices.slice(i, i + 3)];
+        if (triangle.includes(vertex)) for (const index of triangle) attachedSamples.add(full.sampleIndices![index]);
+      }
+      // Each seam vertex is shared by triangles on both sides of the join.
+      expect(attachedSamples.has(0)).toBe(true);
+      expect(attachedSamples.has(2)).toBe(true);
+    }
+    const area = (geometry: RibbonGeometryData) => triangles(geometry).reduce((sum, triangle) => sum + triangle.getArea(), 0);
+    let seamArea = 0;
+    for (const length of [0.25, 0.5]) {
+      const oldPrefix = buildVisibleRibbon(previous, length, 0.006, collider);
+      const newPrefix = buildVisibleRibbon(next, length, 0.006, collider);
+      expect(area(oldPrefix)).toBeGreaterThan(0);
+      expect(maxSurfaceDistance(oldPrefix, newPrefix)).toBeLessThan(0.0000002);
+      expect(maxSurfaceDistance(newPrefix, oldPrefix)).toBeLessThan(0.0000002);
+      expect(Math.abs(area(oldPrefix) - area(newPrefix))).toBeLessThan(1e-8);
+      seamArea = area(newPrefix);
+    }
+    const afterSeam = buildVisibleRibbon(next, 0.75, 0.006, collider);
+    const whole = buildVisibleRibbon(next, 1, 0.006, collider);
+    expect(area(afterSeam)).toBeGreaterThan(seamArea + 1e-6);
+    expect(area(whole)).toBeGreaterThan(area(afterSeam) + 1e-6);
+    expect(maxSurfaceDistance(afterSeam, whole)).toBeLessThan(0.0000002);
+  });
+
   it('keeps the non-grid prefix surface within 0.5 mm after re-curling', () => {
     const editor = new HairEditor(createDemoHairState());
     expect(editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 }).changed).toBe(true);

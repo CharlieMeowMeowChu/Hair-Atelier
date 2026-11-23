@@ -8,8 +8,8 @@ for (const long of [false, true]) {
   editor.curlRange('C', { startS: 0.04, endS: 0.4, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 });
   if (long) editor.growBy('C', 1.6);
   const strand = editor.exportState().strands.find((s) => s.id === 'C')!;
-  const times: number[] = []; let count = 0;
-  for (let i = 0; i < 40; i++) { const start = performance.now(); const samples = fullHairSamples(strand, head); buildVisibleRibbon(samples, strand.length, 0.006, head); const elapsed = performance.now() - start; count = samples.length; if (i >= 10) times.push(elapsed); }
+  const times: number[] = []; let count = 0; let triangles = 0;
+  for (let i = 0; i < 40; i++) { const start = performance.now(); const samples = fullHairSamples(strand, head); const ribbon = buildVisibleRibbon(samples, strand.length, 0.006, head); const elapsed = performance.now() - start; count = samples.length; triangles = ribbon.indices.length / 3; if (i >= 10) times.push(elapsed); }
   times.sort((a, b) => a - b);
-  process.stdout.write(JSON.stringify({length: strand.length, samples: count, medianMs: times[15], p95Ms: times[28]}) + '\n');
+  process.stdout.write(JSON.stringify({length: strand.length, samples: count, triangles, medianMs: times[15], p95Ms: times[28]}) + '\n');
 }

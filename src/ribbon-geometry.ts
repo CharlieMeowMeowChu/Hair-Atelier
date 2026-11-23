@@ -4,6 +4,8 @@ import type { EllipsoidCollider } from './head-collision';
 export interface RibbonGeometryData {
   readonly positions: Float32Array;
   readonly indices: Uint32Array;
+  /** Present when a narrower outgoing segment needs a separate start pair. */
+  readonly sampleIndices?: Uint32Array;
 }
 
 const epsilon = 1e-10;
@@ -73,7 +75,7 @@ export function buildRibbonGeometryData(points: readonly Vec3[], widthMeters: nu
   // For any point on a centreline segment, minRadius * (normalised
   // distance - 1) is a conservative lower bound on distance to the head.
   // Limiting both endpoint offsets to that bound protects the whole triangle.
-  const safeWidths = points.map(() => halfWidth);
+  const segmentWidths = Array.from({ length: points.length - 1 }, () => halfWidth);
   if (collider) {
     const normalized = (p: Vec3): Vec3 => [
       (p[0] - collider.center[0]) / collider.radii[0],
@@ -87,24 +89,49 @@ export function buildRibbonGeometryData(points: readonly Vec3[], widthMeters: nu
       const t = denominator > epsilon ? Math.max(0, Math.min(1, -dot(a, delta) / denominator)) : 0;
       const distance = Math.hypot(...add(a, scale(delta, t)));
       const safe = Math.max(0, Math.min(...collider.radii) * (distance - 1) - 0.000001);
-      safeWidths[i] = Math.min(safeWidths[i], safe);
-      safeWidths[i + 1] = Math.min(safeWidths[i + 1], safe);
+      segmentWidths[i] = Math.min(halfWidth, safe);
     }
   }
-  const positions = new Float32Array(points.length * 2 * 3);
+  const positions: number[] = [];
+  const sides: Vec3[] = [];
   let side = fallbackSide(tangentAt(points, 0));
   for (let index = 0; index < points.length; index += 1) {
     const tangent = tangentAt(points, index);
     if (index > 0) side = transportSide(side, tangent);
-    const left = add(points[index], scale(side, safeWidths[index]));
-    const right = subtract(points[index], scale(side, safeWidths[index]));
-    positions.set(left, index * 6);
-    positions.set(right, index * 6 + 3);
+    sides.push(side);
+    const width = segmentWidths[Math.max(0, index - 1)];
+    const left = add(points[index], scale(side, width));
+    const right = subtract(points[index], scale(side, width));
+    positions.push(...left, ...right);
   }
-  const indices = new Uint32Array((points.length - 1) * 6);
+  const sampleIndices = Array.from({ length: points.length * 2 }, (_, index) => Math.floor(index / 2));
+  const narrowPairs = new Map<number, number>();
   for (let index = 0; index < points.length - 1; index += 1) {
-    const vertex = index * 2;
-    indices.set([vertex, vertex + 1, vertex + 2, vertex + 1, vertex + 3, vertex + 2], index * 6);
+    const previousWidth = segmentWidths[Math.max(0, index - 1)];
+    if (segmentWidths[index] < previousWidth) {
+      // Both pairs lie on the same cross-section; the smaller pair is a
+      // subset of the preceding edge and cannot widen an unsafe segment.
+      const vertex = positions.length / 3;
+      const offset = scale(sides[index], segmentWidths[index]);
+      positions.push(...add(points[index], offset), ...subtract(points[index], offset));
+      sampleIndices.push(index, index);
+      narrowPairs.set(index, vertex);
+    }
   }
-  return { positions, indices };
+  const triangles: number[] = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = narrowPairs.get(index) ?? index * 2;
+    const end = (index + 1) * 2;
+    triangles.push(start, start + 1, end);
+    const nextNarrow = narrowPairs.get(index + 1);
+    if (nextNarrow === undefined) triangles.push(start + 1, end + 1, end);
+    else {
+      // Split only the original end-edge triangle, sharing the narrower
+      // vertices with the next segment while retaining the same surface.
+      triangles.push(start + 1, end + 1, nextNarrow + 1,
+        start + 1, nextNarrow + 1, nextNarrow,
+        start + 1, nextNarrow, end);
+    }
+  }
+  return { positions: new Float32Array(positions), indices: new Uint32Array(triangles), ...(sampleIndices.length > points.length * 2 ? { sampleIndices: new Uint32Array(sampleIndices) } : {}) };
 }
