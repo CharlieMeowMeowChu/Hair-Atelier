@@ -141,12 +141,13 @@ try {
       canvasCount: document.querySelectorAll('#stage canvas').length,
       overlayLabel: document.querySelector('#overlay div:nth-child(2) dt')?.textContent,
       status: document.querySelector('#status')?.textContent,
+      startupReady: !!document.querySelector('#save') && !document.querySelector('#save').disabled,
       touchTargetsValid: [...document.querySelectorAll('button, select')].every((element) => getComputedStyle(element).minHeight === '44px' || element.getBoundingClientRect().height >= 44),
       stageTouchAction: document.querySelector('#stage') ? getComputedStyle(document.querySelector('#stage')).touchAction : undefined,
       errors: globalThis.__hairAtelierSmokeErrors ?? [],
     })`);
     const parsed = JSON.parse(state);
-    if (parsed.canvasCount === 1 && parsed.overlayLabel === 'Rest arc s' && parsed.status !== '載入 3D 髮束中' && parsed.touchTargetsValid && parsed.stageTouchAction === 'none') break;
+    if (parsed.canvasCount === 1 && parsed.overlayLabel === 'Rest arc s' && parsed.status !== '載入 3D 髮束中' && parsed.startupReady && parsed.touchTargetsValid && parsed.stageTouchAction === 'none') break;
     await delay(100);
   }
   const parsed = JSON.parse(state ?? '{}');
@@ -329,6 +330,66 @@ try {
     }
     return false;
   };
+  // Delay the very first IndexedDB open and try actual controls while a
+  // non-default hairstyle is still loading. An early save used to replace it
+  // with the default scene before the user saw the saved hairstyle.
+  const startupHistory = JSON.parse(indexedHistory);
+  startupHistory.current.strands.find((strand) => strand.id === 'C').length = 0.2;
+  const startupSerialized = JSON.stringify(startupHistory);
+  await storageWrite(startupSerialized, legacySerialized);
+  const delayedOpen = await client.command('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+    const open = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (...args) {
+      const request = open.apply(this, args);
+      return new Proxy(request, {
+        get(target, key) { const value = Reflect.get(target, key, target); return typeof value === 'function' ? value.bind(target) : value; },
+        set(target, key, value) {
+          if (key === 'onsuccess' && typeof value === 'function') {
+            target.onsuccess = (event) => setTimeout(() => value.call(target, event), 3500);
+            return true;
+          }
+          return Reflect.set(target, key, value, target);
+        }
+      });
+    };
+  })();` });
+  await client.command('Emulation.setDeviceMetricsOverride', { width: 430, height: 932, deviceScaleFactor: 1, mobile: true });
+  await client.command('Page.navigate', { url: appUrl });
+  const startupDeadline = Date.now() + 10_000;
+  let startupLocked = false;
+  while (Date.now() < startupDeadline) {
+    startupLocked = await evaluate(client, `!!document.querySelector('#stage canvas') &&
+      document.querySelector('#status')?.textContent?.includes('正在讀取本機髮型') &&
+      [...document.querySelectorAll('button, input, select')].every((element) => element.disabled)`);
+    if (startupLocked) break;
+    await delay(25);
+  }
+  const startupTargets = await evaluate(client, `(() => {
+    const point = (selector) => { const r = document.querySelector(selector).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+    return { save: point('#save'), reset: point('#reset'), stage: point('#stage canvas') };
+  })()`);
+  await delay(100);
+  const beforeStartupGesture = await screenshot(client);
+  for (const point of [startupTargets.save, startupTargets.reset]) {
+    await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 });
+    await client.command('Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 });
+  }
+  await client.command('Input.dispatchMouseEvent', { type: 'mousePressed', ...startupTargets.stage, button: 'left', clickCount: 1 });
+  await client.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x: startupTargets.stage.x + 90, y: startupTargets.stage.y + 30, button: 'left', buttons: 1 });
+  await client.command('Input.dispatchMouseEvent', { type: 'mouseReleased', x: startupTargets.stage.x + 90, y: startupTargets.stage.y + 30, button: 'left', clickCount: 1 });
+  await delay(100);
+  const afterStartupGesture = await screenshot(client);
+  const startupLoaded = await waitStatus('已自動讀取本機儲存與操作歷史');
+  const startupControlsEnabled = await evaluate(client, `['#save', '#reset', '[data-tool=rotate]'].every((selector) => !document.querySelector(selector).disabled)`);
+  await evaluate(client, "document.querySelector('[data-tool=rotate]').click()");
+  const startupDisplayedSavedLength = await evaluate(client, "document.querySelector('#status').textContent.includes('C：20 cm')");
+  const startupStored = await evaluate(client, "import('/src/indexeddb-storage.ts').then(module => module.readEditorHistory()).then(result => result.value)");
+  parsed.startupLoadGuardValid = !!(startupLocked && beforeStartupGesture === afterStartupGesture && startupLoaded && startupControlsEnabled && startupDisplayedSavedLength && startupStored === startupSerialized);
+  await client.command('Page.removeScriptToEvaluateOnNewDocument', { identifier: delayedOpen.identifier });
+  await storageWrite(indexedHistory, legacySerialized);
+  await client.command('Page.navigate', { url: appUrl });
+  await waitStatus('已自動讀取本機儲存與操作歷史');
+  await client.command('Emulation.clearDeviceMetricsOverride');
   // A valid saved root inside the head cannot be routed safely. Verify the
   // app warns without silently rewriting the original history, then recovers
   // when the user loads a normal history in the same page.
@@ -645,10 +706,10 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.twoFingerPanValid || !parsed.longTailPanCutValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.curlSpanControlValid || !parsed.middleRecurlFlowValid || !parsed.collisionFailureGuardValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.v3IndexedDbLoaded || !parsed.v3UpgradeSaved || !parsed.corruptV3Protected || !parsed.v3RaceRejected || !parsed.corruptStorageProtected || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.startupReady || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.twoFingerPanValid || !parsed.longTailPanCutValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.curlSpanControlValid || !parsed.middleRecurlFlowValid || !parsed.collisionFailureGuardValid || !parsed.startupLoadGuardValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.v3IndexedDbLoaded || !parsed.v3UpgradeSaved || !parsed.corruptV3Protected || !parsed.v3RaceRejected || !parsed.corruptStorageProtected || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, twoFingerPanValid=${parsed.twoFingerPanValid}, longTailPanCutValid=${parsed.longTailPanCutValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, curlSpanControlValid=${parsed.curlSpanControlValid}, middleRecurlFlowValid=${parsed.middleRecurlFlowValid}, collisionFailureGuardValid=${parsed.collisionFailureGuardValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, v3IndexedDbLoaded=${parsed.v3IndexedDbLoaded}, v3UpgradeSaved=${parsed.v3UpgradeSaved}, corruptV3Protected=${parsed.corruptV3Protected}, v3RaceRejected=${parsed.v3RaceRejected}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, twoFingerPanValid=${parsed.twoFingerPanValid}, longTailPanCutValid=${parsed.longTailPanCutValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, curlSpanControlValid=${parsed.curlSpanControlValid}, middleRecurlFlowValid=${parsed.middleRecurlFlowValid}, collisionFailureGuardValid=${parsed.collisionFailureGuardValid}, startupLoadGuardValid=${parsed.startupLoadGuardValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, v3IndexedDbLoaded=${parsed.v3IndexedDbLoaded}, v3UpgradeSaved=${parsed.v3UpgradeSaved}, corruptV3Protected=${parsed.corruptV3Protected}, v3RaceRejected=${parsed.v3RaceRejected}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
   secondClient?.close();
   client?.close();

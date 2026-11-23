@@ -24,6 +24,12 @@ const stage = document.querySelector<HTMLElement>('#stage');
 const status = document.querySelector<HTMLElement>('#status');
 if (!stage || !status) throw new Error('Required UI is missing');
 const appStatus: HTMLElement = status;
+// Do not let a new interaction replace a saved hairstyle before the initial
+// asynchronous IndexedDB read has completed.
+let storageInitialized = false;
+const initialControls = [...document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button, input, select')]
+  .map((control) => ({ control, disabled: control.disabled }));
+for (const { control } of initialControls) control.disabled = true;
 const storageWarning = document.querySelector<HTMLElement>('#storage-warning');
 const renderWarning = document.querySelector<HTMLElement>('#render-warning');
 function showStorageWarning(message: string): void {
@@ -51,6 +57,7 @@ let finishInitialStorageRead!: () => void;
 const initialStorageRead = new Promise<void>((resolve) => { finishInitialStorageRead = resolve; });
 const saveQueue = new SaveQueue();
 function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
+  if (!storageInitialized) return Promise.resolve(false);
   hasUnsavedChanges = true;
   const result = saveQueue.save(JSON.stringify(candidate.exportHistory()), async (snapshot) => {
     await initialStorageRead;
@@ -590,6 +597,7 @@ function commitTap(tool: Tool, hit: HairHit): void {
   }
 }
 renderer.domElement.addEventListener('pointerdown', (event) => {
+  if (!storageInitialized) return;
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (activePointers.size > 1 && tool !== 'rotate') {
     pointer = undefined;
@@ -849,6 +857,7 @@ new ResizeObserver(() => {
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => undefined);
 redraw();
+appStatus.textContent = '正在讀取本機髮型…';
 const initialRevision = saveQueue.revision;
 void loadPersistedEditor().then((restored) => {
   if (!restored) return;
@@ -857,4 +866,9 @@ void loadPersistedEditor().then((restored) => {
   editor = restored.editor;
   redraw();
   appStatus.textContent = '已自動讀取本機儲存與操作歷史';
-}).finally(finishInitialStorageRead);
+}).finally(() => {
+  storageInitialized = true;
+  finishInitialStorageRead();
+  for (const { control, disabled } of initialControls) control.disabled = disabled;
+  if (appStatus.textContent === '正在讀取本機髮型…') redraw();
+});
