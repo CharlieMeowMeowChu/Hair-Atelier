@@ -1,5 +1,7 @@
 import { pointAt, type GuideStrand } from './hair-core';
 import { constrainHairSamples, type EllipsoidCollider, type HairCollisionSample } from './head-collision';
+import { terminalRecordedCurlIndex } from './arc-boundaries';
+import { curlContinuationFrame } from './arc-length';
 
 const sampleStepMeters = 0.005;
 
@@ -15,8 +17,14 @@ export function fullHairSamples(strand: GuideStrand, collider: EllipsoidCollider
   const step = sampleStepMeters;
   const segments = fullHairGridSegments(strand.maximumLength);
   const horizon = segments * step;
-  const curls = strand.curls.map((curl, index) => index === strand.curls.length - 1 && curl.endS === strand.maximumLength
-    ? { ...curl, endS: horizon } : curl);
+  const terminalIndex = terminalRecordedCurlIndex(strand);
+  let curls = strand.curls;
+  if (terminalIndex !== undefined && terminalIndex === strand.curls.length - 1) {
+    curls = strand.curls.map((curl, index) => index === terminalIndex ? { ...curl, endS: horizon } : curl);
+  } else if (terminalIndex !== undefined) {
+    const frame = curlContinuationFrame(strand, strand.maximumLength);
+    if (frame) curls = [...strand.curls, { ...strand.curls[terminalIndex], startS: strand.maximumLength, endS: horizon, frameRoll: frame.roll }];
+  }
   const full = { ...strand, curls, length: horizon, maximumLength: horizon };
   const samples = Array.from({ length: segments + 1 }, (_, index) => {
     const s = index * step;

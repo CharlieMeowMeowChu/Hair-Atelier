@@ -1,4 +1,5 @@
 import type { CurlSegment, GuideStrand, Vec3 } from './hair-core';
+import { effectiveCurlIntervals } from './arc-boundaries';
 
 export interface ArcLengthSample {
   readonly s: number;
@@ -125,14 +126,7 @@ function makeHelix(start: Vec3, startS: number, curl: CurlSegment, incomingTange
 }
 
 function validCurls(strand: GuideStrand): readonly CurlSegment[] {
-  const valid: CurlSegment[] = [];
-  let previousEnd = 0;
-  for (const curl of strand.curls) {
-    if (curl.startS < previousEnd || curl.startS < 0 || curl.endS <= curl.startS || curl.endS > strand.maximumLength) continue;
-    valid.push(curl);
-    previousEnd = curl.endS;
-  }
-  return valid;
+  return effectiveCurlIntervals(strand).map((entry) => entry.curl);
 }
 
 function buildSegments(strand: GuideStrand): readonly RestSegment[] {
@@ -163,7 +157,7 @@ function buildSegments(strand: GuideStrand): readonly RestSegment[] {
 }
 
 /**
- * Derive a local frame for a continuation of an existing helix. The resulting
+ * Derive a local frame within a helix or at its end. The resulting
  * roll is relative to the incoming tangent and can later be transported to a
  * new tangent. Undefined means the frame is numerically too ill-conditioned.
  * This helper does not mutate or serialize any hairstyle.
@@ -171,7 +165,7 @@ function buildSegments(strand: GuideStrand): readonly RestSegment[] {
 export function curlContinuationFrame(strand: GuideStrand, splitS: number): { readonly roll: number; readonly tangent: Vec3; readonly point: Vec3 } | undefined {
   if (!Number.isFinite(splitS)) return undefined;
   const segment = buildSegments(strand).find((candidate): candidate is HelixSegment =>
-    candidate.kind === 'helix' && splitS > candidate.startS && splitS < candidate.endS);
+    candidate.kind === 'helix' && splitS > candidate.startS && splitS <= candidate.endS);
   if (!segment) return undefined;
   const tangent = helixTangent(segment, splitS);
   const projected = subtract(segment.axis, scale(tangent, tangent[0] * segment.axis[0] + tangent[1] * segment.axis[1] + tangent[2] * segment.axis[2]));

@@ -1,5 +1,6 @@
 import { assessActionIntent } from './constraint-graph';
 import { curlContinuationFrame, restPointAt } from './arc-length';
+import { terminalRecordedCurlIndex, restArcToleranceMeters } from './arc-boundaries';
 
 export type Vec3 = readonly [number, number, number];
 
@@ -140,7 +141,7 @@ function strandIsValid(value: unknown, requirePhysicalRanges: boolean): value is
   if (strand.braid && strand.braid.endS > strand.maximumLength! + 1e-9) return false;
   let previousEnd = 0;
   for (const curl of strand.curls) {
-    if (curl.startS < previousEnd - 1e-9 || curl.endS > strand.maximumLength! + 1e-9) return false;
+    if (curl.startS < previousEnd - restArcToleranceMeters || curl.endS > strand.maximumLength! + restArcToleranceMeters) return false;
     previousEnd = curl.endS;
   }
   return true;
@@ -596,9 +597,19 @@ export class HairEditor {
       return { changed: false, reason: constraint.message, strandId };
     }
     const maximumLength = Math.max(strand.maximumLength, length);
-    const curls = strand.curls.map((curl, index) =>
-      index === strand.curls.length - 1 && curl.endS === strand.maximumLength && maximumLength > strand.maximumLength
-        ? { ...curl, endS: maximumLength } : curl);
+    const terminalIndex = terminalRecordedCurlIndex(strand);
+    let curls = strand.curls;
+    if (maximumLength > strand.maximumLength && terminalIndex !== undefined) {
+      if (terminalIndex === strand.curls.length - 1) {
+        curls = strand.curls.map((curl, index) => index === terminalIndex ? { ...curl, endS: maximumLength } : curl);
+      } else {
+        // Later raw intervals are fully covered at the old tip. Preserve them
+        // and add a continuous suffix instead of rewriting their parameters.
+        const frame = curlContinuationFrame(strand, strand.maximumLength);
+        if (!frame) return { changed: false, reason: '無法安全延續原有捲髮', strandId };
+        curls = [...strand.curls, { ...strand.curls[terminalIndex], startS: strand.maximumLength, endS: maximumLength, frameRoll: frame.roll }];
+      }
+    }
     this.saveUndo();
     this.state = replaceStrand(this.state, { ...strand, length, maximumLength, curls });
     return { changed: true, strandId, oldLength: strand.length, newLength: length };

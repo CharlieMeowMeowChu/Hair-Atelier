@@ -253,6 +253,119 @@ it('extends a straight tail without extending a curl that ends before the record
   expect(distance(restPointAt(prior, 0.55), restPointAt(grown, 0.55))).toBeLessThan(1e-9);
 });
 
+it('renders both saved curls when their intervals overlap only within validation tolerance', () => {
+  const base = createDemoHairState();
+  const first = { startS: 0.04, endS: 0.2000000005, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+  const second = { startS: 0.2, endS: 0.35, radius: 0.04, pitch: 0.08, phase: 0.3, direction: -1 as const };
+  const savedState = { ...base, strands: base.strands.map((s) => s.id === 'C' ? { ...s, curls: [first, second] } : s) };
+  const serialized = JSON.stringify(savedState);
+  const restored = parseHairState(serialized);
+  expect(restored).toBeDefined();
+  const actual = restored!.strands.find((s) => s.id === 'C')!;
+  const expected = { ...actual, curls: [{ ...first, endS: 0.2 }, second] };
+  for (const s of [0, 0.1, 0.2, 0.21, 0.25, 0.3, 0.35]) {
+    expect(distance(restPointAt(actual, s), restPointAt(expected, s))).toBeLessThan(1e-8);
+  }
+  expect(dot(restTangentAt(actual, 0.2 - 1e-6), restTangentAt(actual, 0.2 + 1e-6))).toBeGreaterThan(0.999999);
+  // Evaluation must not rewrite the original persisted coordinates.
+  expect(JSON.stringify(restored)).toBe(serialized);
+  const invalidOverlap = { ...savedState, strands: savedState.strands.map((s) => s.id === 'C' ? { ...s, curls: [{ ...first, endS: 0.200000002 }, second] } : s) };
+  expect(parseHairState(JSON.stringify(invalidOverlap))).toBeUndefined();
+  const editor = new HairEditor(restored!);
+  expect(editor.cutAt('C', 0.29).changed).toBe(true);
+  const parsedHistory = parseEditorHistory(JSON.stringify(editor.exportHistory()));
+  expect(parsedHistory).toBeDefined();
+  const replay = new HairEditor(parsedHistory!.current, parsedHistory!);
+  expect(distance(restPointAt(replay.exportState().strands.find((s) => s.id === 'C')!, 0.25), restPointAt(actual, 0.25))).toBeLessThan(1e-9);
+  replay.undo(); expect(replay.exportState()).toEqual(restored);
+  replay.redo(); expect(replay.exportState()).toEqual(editor.exportState());
+});
+
+it('renders and continues a saved curl whose end exceeds the recorded tip by half a nanometre', () => {
+  const base = createDemoHairState();
+  const curl = { startS: 0.04, endS: 0.6000000005, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+  const state = { ...base, strands: base.strands.map((s) => s.id === 'C' ? { ...s, curls: [curl] } : s) };
+  const serialized = JSON.stringify(state);
+  const restored = parseHairState(serialized);
+  expect(restored).toBeDefined();
+  const original = restored!.strands.find((s) => s.id === 'C')!;
+  const expected = { ...original, curls: [{ ...curl, endS: original.maximumLength }] };
+  for (const s of [0.04, 0.1, 0.3, 0.4]) expect(distance(restPointAt(original, s), restPointAt(expected, s))).toBeLessThan(1e-8);
+  expect(JSON.stringify(restored)).toBe(serialized);
+  const editor = new HairEditor(restored!);
+  expect(editor.growBy('C', 0.25).changed).toBe(true);
+  const grown = editor.exportState().strands.find((s) => s.id === 'C')!;
+  expect(grown.length).toBeCloseTo(0.65);
+  expect(grown.curls[0].endS).toBeCloseTo(0.65);
+  expect(dot(restTangentAt(grown, 0.6 - 1e-6), restTangentAt(grown, 0.6 + 1e-6))).toBeGreaterThan(0.999999);
+  expect(dot(restTangentAt(grown, 0.62), restTangentAt(grown, 0.64))).toBeLessThan(0.99);
+  editor.undo(); expect(editor.exportState()).toEqual(restored);
+  editor.redo(); expect(editor.exportState().strands.find((s) => s.id === 'C')).toEqual(grown);
+});
+
+it('retains a later curl after multiple fully covered tolerance-sized intervals', () => {
+  const base = createDemoHairState();
+  const first = { startS: 0.04, endS: 0.2, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+  const template = { radius: 0.04, pitch: 0.08, phase: 0.3, direction: -1 as const };
+  const curls = [first,
+    { ...template, startS: 0.1999999991, endS: 0.1999999992 },
+    { ...template, startS: 0.1999999983, endS: 0.1999999984 },
+    { ...template, startS: 0.1999999975, endS: 0.35 }];
+  const state = { ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, curls } : strand) };
+  const saved = JSON.stringify(state);
+  const parsed = parseHairState(saved);
+  expect(parsed).toBeDefined();
+  const actual = parsed!.strands.find((strand) => strand.id === 'C')!;
+  const expected = { ...actual, curls: [first, { ...curls[3], startS: 0.2 }] };
+  for (const s of [0.2, 0.21, 0.25, 0.3, 0.35]) {
+    expect(distance(restPointAt(actual, s), restPointAt(expected, s))).toBeLessThan(1e-9);
+  }
+  expect(JSON.stringify(parsed)).toBe(saved);
+});
+
+it('continues the actual terminal curl without rewriting later fully covered records', () => {
+  for (const coveredEnd of [0.6, 0.6000000005, 0.600000001]) {
+    const base = createDemoHairState();
+    const first = { startS: 0.04, endS: 0.6, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+    const covered = { startS: 0.5999999995, endS: coveredEnd, radius: 0.04, pitch: 0.12, phase: 0.8, direction: -1 as const };
+    const state = { ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, length: 0.6, maximumLength: 0.6, curls: [first, covered] } : strand) };
+    const parsed = parseHairState(JSON.stringify(state));
+    expect(parsed).toBeDefined();
+    const editor = new HairEditor(parsed!);
+    const before = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    expect(editor.growBy('C', 0.05).changed).toBe(true);
+    const after = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    expect(after.curls.slice(0, 2)).toEqual([first, covered]);
+    expect(after.curls[2]).toMatchObject({ startS: 0.6, endS: 0.65, radius: first.radius, pitch: first.pitch, phase: first.phase, direction: first.direction });
+    const expected = { ...after, curls: [{ ...first, endS: 0.65 }] };
+    for (const s of [0.2, 0.5, 0.6, 0.61, 0.64]) expect(distance(restPointAt(after, s), restPointAt(expected, s))).toBeLessThan(1e-7);
+    expect(dot(restTangentAt(after, 0.6 - 1e-6), restTangentAt(after, 0.6 + 1e-6))).toBeGreaterThan(0.999999);
+    expect(parseEditorHistory(JSON.stringify(editor.exportHistory()))).toBeDefined();
+    editor.undo(); expect(editor.exportState().strands.find((strand) => strand.id === 'C')).toEqual(before);
+    editor.redo(); expect(editor.exportState().strands.find((strand) => strand.id === 'C')).toEqual(after);
+    expect(editor.growBy('C', 0.05).changed).toBe(true);
+    const again = editor.exportState().strands.find((strand) => strand.id === 'C')!;
+    expect(again.curls).toHaveLength(3);
+    expect(again.curls.slice(0, 2)).toEqual([first, covered]);
+    expect(again.curls[2].endS).toBeCloseTo(0.7);
+  }
+});
+
+it('rejects an unstable covered-tail continuation without changing its data or history', () => {
+  const base = createDemoHairState();
+  const first = { startS: 0.04, endS: 0.6, radius: 1e-20, pitch: 0.08, phase: 0.3, direction: 1 as const };
+  const covered = { startS: 0.5999999995, endS: 0.6, radius: 0.04, pitch: 0.12, phase: 0.8, direction: -1 as const };
+  const state = { ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, length: 0.6, maximumLength: 0.6, curls: [first, covered] } : strand) };
+  const parsed = parseHairState(JSON.stringify(state));
+  expect(parsed).toBeDefined();
+  const editor = new HairEditor(parsed!);
+  const result = editor.growBy('C', 0.05);
+  expect(result.changed).toBe(false);
+  expect(result.reason).toContain('無法安全');
+  expect(editor.exportState()).toEqual(parsed);
+  expect(editor.canUndo).toBe(false);
+});
+
 describe('curl continuation frame', () => {
   it('reconstructs an unmodified suffix at the same material coordinates', async () => {
     const { curlContinuationFrame, evaluateCurlContinuation } = await import('./arc-length');

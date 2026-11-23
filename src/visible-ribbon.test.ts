@@ -197,6 +197,87 @@ it('restores extended straight and curled ribbons after saving, loading and redo
   }
 });
 
+it('continues a saved curl whose recorded end exceeds the tail within tolerance', async () => {
+  const { parseEditorHistory, parseHairState } = await import('./hair-core');
+  const { restTangentAt } = await import('./arc-length');
+  const base = createDemoHairState();
+  const savedState = { ...base, strands: base.strands.map((strand) => strand.id === 'C' ? {
+    ...strand, length: 0.6, maximumLength: 0.6,
+    curls: [{ startS: 0.04, endS: 0.6000000005, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const }],
+  } : strand) };
+  const savedText = JSON.stringify(savedState);
+  const parsed = parseHairState(savedText);
+  expect(parsed).toBeDefined();
+  expect(JSON.stringify(parsed)).toBe(savedText);
+  const editor = new HairEditor(parsed!);
+  const strand = (source: HairEditor) => source.exportState().strands.find((item) => item.id === 'C')!;
+  const render = (source: HairEditor) => {
+    const current = strand(source);
+    return buildVisibleRibbon(fullHairSamples(current, head), current.length, 0.006, head);
+  };
+  const before = render(editor);
+  expect(editor.exportState()).toEqual(parsed);
+  expect(editor.growBy('C', 0.05).changed).toBe(true);
+  const grown = strand(editor);
+  expect(grown.curls[0].endS).toBeCloseTo(0.65, 10);
+  const tangentA = restTangentAt(grown, 0.62), tangentB = restTangentAt(grown, 0.64);
+  expect(tangentA.reduce((sum, value, index) => sum + value * tangentB[index], 0)).toBeLessThan(0.99);
+  const after = render(editor);
+  expect(maxSurfaceDistance(before, after)).toBeLessThanOrEqual(0.0005);
+  expect(editor.exportState().strands.filter((item) => item.id !== 'C')).toEqual(parsed!.strands.filter((item) => item.id !== 'C'));
+  const saved = parseEditorHistory(JSON.stringify(editor.exportHistory()));
+  expect(saved).toBeDefined();
+  const restored = new HairEditor(saved!.current, saved!);
+  expect(render(restored)).toEqual(after);
+  restored.undo();
+  expect(restored.exportState()).toEqual(parsed);
+  expect(render(restored)).toEqual(before);
+  restored.redo();
+  expect(render(restored)).toEqual(after);
+});
+
+it('keeps an actual straight tail when the curl stops just before the recorded end', async () => {
+  const { parseHairState } = await import('./hair-core');
+  const { restTangentAt } = await import('./arc-length');
+  const base = createDemoHairState();
+  const savedState = { ...base, strands: base.strands.map((strand) => strand.id === 'C' ? {
+    ...strand, length: 0.6, maximumLength: 0.6,
+    curls: [{ startS: 0.04, endS: 0.5999999995, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const }],
+  } : strand) };
+  const parsed = parseHairState(JSON.stringify(savedState));
+  expect(parsed).toBeDefined();
+  const editor = new HairEditor(parsed!);
+  const previous = editor.exportState().strands.find((item) => item.id === 'C')!;
+  expect(editor.growBy('C', 0.05).changed).toBe(true);
+  const grown = editor.exportState().strands.find((item) => item.id === 'C')!;
+  expect(grown.curls).toEqual(previous.curls);
+  const tangentA = restTangentAt(grown, 0.61), tangentB = restTangentAt(grown, 0.64);
+  expect(tangentA.reduce((sum, value, index) => sum + value * tangentB[index], 0)).toBeGreaterThan(0.999999);
+});
+
+it('keeps the visible surface when a covered terminal record needs a new curl continuation', async () => {
+  const { parseEditorHistory, parseHairState } = await import('./hair-core');
+  const base = createDemoHairState();
+  const first = { startS: 0.04, endS: 0.6, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+  const covered = { startS: 0.5999999995, endS: 0.6000000005, radius: 0.04, pitch: 0.12, phase: 0.8, direction: -1 as const };
+  const state = { ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, length: 0.6, maximumLength: 0.6, curls: [first, covered] } : strand) };
+  const editor = new HairEditor(parseHairState(JSON.stringify(state))!);
+  const render = (source: HairEditor) => {
+    const strand = source.exportState().strands.find((item) => item.id === 'C')!;
+    return buildVisibleRibbon(fullHairSamples(strand, head), strand.length, 0.006, head);
+  };
+  const before = render(editor);
+  expect(editor.growBy('C', 0.05).changed).toBe(true);
+  const after = render(editor);
+  expect(maxSurfaceDistance(before, after)).toBeLessThanOrEqual(0.0005);
+  const history = parseEditorHistory(JSON.stringify(editor.exportHistory()));
+  expect(history).toBeDefined();
+  const restored = new HairEditor(history!.current, history!);
+  expect(render(restored)).toEqual(after);
+  restored.undo(); expect(render(restored)).toEqual(before);
+  restored.redo(); expect(render(restored)).toEqual(after);
+});
+
 it('keeps a real narrowed seam through cut, growth and saved history', async () => {
   const { parseEditorHistory } = await import('./hair-core');
   for (const cut of [0.4175, 0.42, 0.4225]) {

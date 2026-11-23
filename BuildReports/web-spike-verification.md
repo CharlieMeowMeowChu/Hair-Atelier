@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：21 test files、113 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：21 test files、121 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
@@ -59,7 +59,7 @@
 - 中段重捲令修改區之前的髮片邊界移位：改用入向切線及 5 mm 固定取樣後，原本偏移約 0.565 mm 的非網格案例通過；16 組指定起點與方向的前綴表面雙向採樣距離 ≤0.5 mm，完整髮片三角面亦通過頭顱碰撞測試。相鄰段安全寬度改用獨立截面並共用細分接縫；原先合成案例的前段偏移約 2.35 mm，修正後保留前段，測試交界前、交界及交界後的裁剪與三角面防穿。此矩陣不是所有捲曲參數或裝置畫面的證明，接縫外觀與效能仍須真機驗證。
 - 接縫組合回歸：在實際示範髮束 D 使用指定捲曲參數，增長至 0.44 m 後出現 0.42 m 接縫；於接縫前、接縫及接縫後剪髮，再增長、序列化／讀取 history、Undo／Redo，對應髮片幾何逐元素一致，剪前／剪後三角面亦通過橢球碰撞檢查。這是程式化參數與 history 序列化測試，並非 iPhone 實測或本案例的 IndexedDB 操作測試。
 - 桌面 Chromium 以 IndexedDB 注入髮根位於頭內的有效存檔：顯示警示且手機尺寸不超出畫面，無法安全顯示的髮束不能以指標命中，正常髮束對照可命中；明確儲存後原 history 未改，載入正常存檔後警示消失。此為本機模擬，並非 Safari 真機驗收。
-- 待修正：存檔解析容許捲髮區間在 1 nm 內的端點誤差，但曲線計算對相同誤差仍嚴格拒絕整段，可能令舊存檔的捲髮顯示被忽略；末端續長亦有同類問題。不能修改原有存檔作為修正，需補回歸測試。
+- 已修正存檔端點容差不一致：曲線與增長以暫態有效區間處理 schema 接受的 1 nm 內重疊／越界，不因讀取或顯示改寫舊數據；測試涵蓋末段續捲、原本直尾、極短重疊段、可見髮片、存讀及 Undo／Redo。若極端退化數值無法穩定求出續接方向，會拒絕該次增長並保留資料。
 - 加密取樣增加運算：本機 Node 單束路徑與髮片重建、預熱後各 30 次的中位數，0.4 m 為約 0.46→1.02 ms，2 m 為約 0.95→2.27 ms；分別由 63→123、203→403 個點。這不是瀏覽器或真機 FPS 測量，裝置效能仍待驗證。
 - 同機 Node 粗略比較接縫修正前後：0.4 m 中位數約 0.70→1.08 ms，2 m 約 1.14→2.13 ms；此兩個示範髮束各為 160／800 個可見三角形，測量受負載與執行期影響，不代表所有頭髮或 iPhone／iPad 效能。
 - Production build 的 Three.js 主 bundle 為約 518 KB（gzip 約 134 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。
