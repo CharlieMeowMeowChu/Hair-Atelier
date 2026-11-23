@@ -329,6 +329,65 @@ try {
     }
     return false;
   };
+  // A valid saved root inside the head cannot be routed safely. Verify the
+  // app warns without silently rewriting the original history, then recovers
+  // when the user loads a normal history in the same page.
+  const badRootHistory = JSON.parse(indexedHistory);
+  const badRootC = badRootHistory.current.strands.find((strand) => strand.id === 'C');
+  Object.assign(badRootC, { root: [0, 0, 0], direction: [0, -1, 0], length: 0.4, maximumLength: 0.6, curls: [] });
+  for (const key of ['partingOffset', 'sideSweepOffset', 'earTuck', 'tie', 'braid']) delete badRootC[key];
+  const badRootSerialized = JSON.stringify(badRootHistory);
+  await client.command('Emulation.setDeviceMetricsOverride', { width: 430, height: 932, deviceScaleFactor: 1, mobile: true });
+  await storageWrite(badRootSerialized, legacySerialized);
+  await client.command('Page.navigate', { url: appUrl });
+  const badRootLoaded = await waitStatus('已自動讀取本機儲存與操作歷史');
+  const warningShown = await evaluate(client, `(() => {
+    const warning = document.querySelector('#render-warning');
+    return !!warning && !warning.hidden && warning.textContent.includes('1 束') && warning.textContent.includes('無法安全顯示');
+  })()`);
+  await evaluate(client, "document.querySelector('[data-tool=cut]').click(); document.querySelector('#front').click()");
+  const otherControlsWork = await evaluate(client, `(() => {
+    const warning = document.querySelector('#render-warning');
+    return document.querySelector('#status').textContent.includes('已回到正面視角')
+      && document.querySelector('[data-tool=cut]').classList.contains('active')
+      && !!warning && !warning.hidden && document.documentElement.scrollHeight <= window.innerHeight;
+  })()`);
+  // Probe the raw centreline below the head using actual pointer events. A
+  // separate valid-root control verifies these coordinates can hit C.
+  const hiddenCandidates = await evaluate(client, `(() => {
+    const r = document.querySelector('#stage canvas').getBoundingClientRect();
+    const focal = r.height / (2 * Math.tan(35 * Math.PI / 360));
+    return [0.32, 0.33, 0.34, 0.35, 0.36, 0.37, 0.38].map(s => ({
+      x: r.left + r.width / 2,
+      y: r.top + r.height / 2 + (0.05 + s) * focal / 1.35
+    })).filter(p => p.x >= r.left + 3 && p.x <= r.right - 3 && p.y >= r.top + 3 && p.y <= r.bottom - 3);
+  })()`);
+  let hiddenPickBlocked = hiddenCandidates.length > 0;
+  for (const point of hiddenCandidates) {
+    await client.command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+    hiddenPickBlocked &&= await evaluate(client, "document.querySelector('#metric-selected').textContent !== 'C'");
+  }
+  await evaluate(client, "document.querySelector('#save').click()");
+  const badRootSaved = await waitStatus('已儲存到本機瀏覽器');
+  const retainedBadRoot = await evaluate(client, "import('/src/indexeddb-storage.ts').then(module => module.readEditorHistory()).then(result => result.value)");
+  const validRootControl = structuredClone(badRootHistory);
+  Object.assign(validRootControl.current.strands.find((strand) => strand.id === 'C'), { root: [0, -0.25, 0], length: 0.15, maximumLength: 0.2 });
+  await storageWrite(JSON.stringify(validRootControl), legacySerialized);
+  await evaluate(client, "document.querySelector('#load').click()");
+  const controlLoaded = await waitStatus('已讀取本機儲存與操作歷史');
+  let validPickObserved = false;
+  for (const point of hiddenCandidates) {
+    await client.command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+    validPickObserved ||= await evaluate(client, "document.querySelector('#metric-selected').textContent === 'C'");
+  }
+  await storageWrite(indexedHistory, legacySerialized);
+  await evaluate(client, "document.querySelector('#load').click()");
+  const normalLoaded = await waitStatus('已讀取本機儲存與操作歷史');
+  const warningCleared = await evaluate(client, "!!document.querySelector('#render-warning') && document.querySelector('#render-warning').hidden");
+  const restoredHistory = await evaluate(client, "import('/src/indexeddb-storage.ts').then(module => module.readEditorHistory()).then(result => result.value)");
+  parsed.collisionFailureGuardValid = !!(badRootLoaded && warningShown && otherControlsWork && hiddenPickBlocked && badRootSaved
+    && retainedBadRoot === badRootSerialized && controlLoaded && validPickObserved && normalLoaded && warningCleared && restoredHistory === indexedHistory);
+  await client.command('Emulation.clearDeviceMetricsOverride');
   const v3History = JSON.parse(indexedHistory);
   v3History.version = 3;
   for (const snapshot of [v3History.current, ...v3History.undo, ...v3History.redo]) snapshot.schemaVersion = 3;
@@ -586,10 +645,10 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.twoFingerPanValid || !parsed.longTailPanCutValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.curlSpanControlValid || !parsed.middleRecurlFlowValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.v3IndexedDbLoaded || !parsed.v3UpgradeSaved || !parsed.corruptV3Protected || !parsed.v3RaceRejected || !parsed.corruptStorageProtected || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.twoFingerPanValid || !parsed.longTailPanCutValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.curlSpanControlValid || !parsed.middleRecurlFlowValid || !parsed.collisionFailureGuardValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.v3IndexedDbLoaded || !parsed.v3UpgradeSaved || !parsed.corruptV3Protected || !parsed.v3RaceRejected || !parsed.corruptStorageProtected || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, twoFingerPanValid=${parsed.twoFingerPanValid}, longTailPanCutValid=${parsed.longTailPanCutValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, curlSpanControlValid=${parsed.curlSpanControlValid}, middleRecurlFlowValid=${parsed.middleRecurlFlowValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, v3IndexedDbLoaded=${parsed.v3IndexedDbLoaded}, v3UpgradeSaved=${parsed.v3UpgradeSaved}, corruptV3Protected=${parsed.corruptV3Protected}, v3RaceRejected=${parsed.v3RaceRejected}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, twoFingerPanValid=${parsed.twoFingerPanValid}, longTailPanCutValid=${parsed.longTailPanCutValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, curlSpanControlValid=${parsed.curlSpanControlValid}, middleRecurlFlowValid=${parsed.middleRecurlFlowValid}, collisionFailureGuardValid=${parsed.collisionFailureGuardValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, v3IndexedDbLoaded=${parsed.v3IndexedDbLoaded}, v3UpgradeSaved=${parsed.v3UpgradeSaved}, corruptV3Protected=${parsed.corruptV3Protected}, v3RaceRejected=${parsed.v3RaceRejected}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
   secondClient?.close();
   client?.close();

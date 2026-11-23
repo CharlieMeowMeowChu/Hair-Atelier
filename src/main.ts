@@ -4,12 +4,11 @@ import {
   TorusGeometry, Vector2, Vector3, WebGLRenderer, type Vector3Tuple,
 } from 'three';
 import './style.css';
-import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, sampleStrandWithArcS, type Vec3 } from './hair-core';
+import { createDemoHairState, HairEditor, parseEditorHistory, parseHairState, type Vec3 } from './hair-core';
 import { assessActionIntent } from './constraint-graph';
 import { hasExceededDragThreshold } from './input-gesture';
 import { projectPointToArcSegment } from './line-arc';
 import { RecentMeasurements } from './performance-metrics';
-import { buildRibbonGeometryData } from './ribbon-geometry';
 import { buildVisibleRibbon } from './visible-ribbon';
 import { fullHairSamples, visibleHairSamples } from './visible-hair';
 import { readEditorHistory, StorageConflictError, writeEditorHistory, type StorageToken } from './indexeddb-storage';
@@ -26,6 +25,7 @@ const status = document.querySelector<HTMLElement>('#status');
 if (!stage || !status) throw new Error('Required UI is missing');
 const appStatus: HTMLElement = status;
 const storageWarning = document.querySelector<HTMLElement>('#storage-warning');
+const renderWarning = document.querySelector<HTMLElement>('#render-warning');
 function showStorageWarning(message: string): void {
   if (!storageWarning) return;
   storageWarning.textContent = message;
@@ -187,7 +187,7 @@ function colorForStrand(id: string): string {
   const hue = [...id].reduce((hash, character) => (hash * 31 + character.codePointAt(0)!) >>> 0, 0) % 360;
   return `hsl(${hue} 78% 70%)`;
 }
-const hairLines = new Map<string, { line: Line; ribbon: Mesh; signature: string }>();
+const hairLines = new Map<string, { line: Line; ribbon: Mesh; signature: string; renderBlocked: boolean }>();
 const guideRibbonWidthMeters = 0.006;
 // Mirrors the visible head mesh (sphere radius .22, scaled 1 / 1.12 / .92).
 // It is render-only: editor state keeps the physical rest centreline unchanged.
@@ -218,8 +218,8 @@ scissorsCursor.add(bladeA, bladeB, new Mesh(new CircleGeometry(0.006, 16), new M
 scissorsCursor.visible = false;
 scene.add(scissorsCursor);
 
-function createRibbonGeometry(points: readonly Vec3[], fullSamples?: ReturnType<typeof fullHairSamples>, length = 0): BufferGeometry {
-  const data = fullSamples ? buildVisibleRibbon(fullSamples, length, guideRibbonWidthMeters, headCollider) : buildRibbonGeometryData(points, guideRibbonWidthMeters, headCollider);
+function createRibbonGeometry(fullSamples: ReturnType<typeof fullHairSamples>, length: number): BufferGeometry {
+  const data = buildVisibleRibbon(fullSamples, length, guideRibbonWidthMeters, headCollider);
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(data.positions, 3));
   geometry.setIndex(new BufferAttribute(data.indices, 1));
@@ -245,43 +245,55 @@ function redraw(): void {
     const signature = JSON.stringify(strand);
     const existing = hairLines.get(strand.id);
     if (existing?.signature === signature) continue;
-    const sampled = sampleStrandWithArcS(strand);
     // A curl may mathematically pass through the head. Constrain only the
     // rendered/pickable centreline so the visual hair stays outside the skull.
-    let renderedSamples: typeof sampled;
-    let fullSamples: ReturnType<typeof fullHairSamples> | undefined;
+    let geometry: BufferGeometry;
+    let ribbonGeometry: BufferGeometry;
+    let sampleS: number[] = [];
+    let renderBlocked = false;
     try {
-      fullSamples = fullHairSamples(strand, headCollider);
-      renderedSamples = visibleHairSamples(strand, headCollider, fullSamples);
+      const fullSamples = fullHairSamples(strand, headCollider);
+      const renderedSamples = visibleHairSamples(strand, headCollider, fullSamples);
+      const renderedPoints = renderedSamples.map((sample) => sample.point);
+      sampleS = renderedSamples.map((sample) => sample.s);
+      ribbonGeometry = createRibbonGeometry(fullSamples, strand.length);
+      geometry = new BufferGeometry().setFromPoints(renderedPoints.map(([x, y, z]) => new Vector3(x, y, z)));
     } catch {
-      // A legacy root inside the head cannot be fixed without moving it.
-      // Preserve the saved data and render the original path instead of crashing.
-      renderedSamples = sampled;
+      // Never replace a failed constrained path with unsafe hair geometry.
+      // Keep the strand's authoritative data unchanged and exclude it from picking.
+      renderBlocked = true;
+      sampleS = [];
+      geometry = new BufferGeometry();
+      ribbonGeometry = new BufferGeometry();
     }
-    const renderedPoints = renderedSamples.map((sample) => sample.point);
-    const points = renderedPoints.map(([x, y, z]) => new Vector3(x, y, z));
-    const geometry = new BufferGeometry().setFromPoints(points);
-    const ribbonGeometry = createRibbonGeometry(renderedPoints, fullSamples, strand.length);
     if (existing) {
       existing.line.geometry.dispose();
       existing.line.geometry = geometry;
       existing.ribbon.geometry.dispose();
       existing.ribbon.geometry = ribbonGeometry;
-      existing.line.userData = { strandId: strand.id, sampleS: renderedSamples.map((sample) => sample.s) };
+      existing.line.userData = { strandId: strand.id, sampleS };
       existing.signature = signature;
+      existing.renderBlocked = renderBlocked;
     } else {
       const material = new LineBasicMaterial({ color: colorForStrand(strand.id), linewidth: 1, transparent: true, opacity: 0, depthWrite: false });
       const line = new Line(geometry, material);
-      line.userData = { strandId: strand.id, sampleS: renderedSamples.map((sample) => sample.s) };
+      line.userData = { strandId: strand.id, sampleS };
       const ribbon = new Mesh(ribbonGeometry, new MeshBasicMaterial({
         color: colorForStrand(strand.id), side: DoubleSide, transparent: false, opacity: 1, depthWrite: true,
       }));
       hair.add(line, ribbon);
-      hairLines.set(strand.id, { line, ribbon, signature });
+      hairLines.set(strand.id, { line, ribbon, signature, renderBlocked });
     }
     const record = hairLines.get(strand.id)!;
+    record.line.visible = !renderBlocked;
+    record.ribbon.visible = !renderBlocked;
     (record.ribbon.material as MeshBasicMaterial).color.set(selectedStrandIds.has(strand.id) ? '#ffeaf1' : colorForStrand(strand.id));
     rebuiltStrandCount += 1;
+  }
+  if (renderWarning) {
+    const blockedCount = [...hairLines.values()].filter((record) => record.renderBlocked).length;
+    renderWarning.hidden = blockedCount === 0;
+    renderWarning.textContent = blockedCount ? `有 ${blockedCount} 束頭髮暫時無法安全顯示，已隱藏；髮型資料仍保留。` : '';
   }
   const activeTies = [...new Map(state.strands.flatMap((strand) => strand.tie ? [[strand.tie.id, strand.tie] as const] : [])).values()];
   tieMarkerPool.forEach((marker) => { marker.visible = false; });
@@ -327,7 +339,7 @@ function preparePickContext(): PickContext {
   camera.updateMatrixWorld(true);
   return {
     rect: renderer.domElement.getBoundingClientRect(),
-    lines: [...hairLines.values()].map((record) => record.line),
+    lines: [...hairLines.values()].filter((record) => !record.renderBlocked).map((record) => record.line),
     cameraPosition: camera.getWorldPosition(new Vector3()),
   };
 }
