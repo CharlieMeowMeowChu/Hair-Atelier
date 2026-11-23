@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：21 test files、112 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：21 test files、113 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
@@ -15,7 +15,7 @@
 | Production bundle 預算 | PASS | `Tools/check_bundle.mjs`：最大 JS bundle ≤600 KB raw／≤150 KB gzip；此為下載量 regression guard，不取代真機 FPS／memory 量測 |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
 | 本機 Chromium browser smoke | PASS | 2026-10-30：`npm run check:browser` 以 430×932 headless Chromium、DevTools Protocol 啟動本機 Vite，確認 canvas=1、`Rest arc s` overlay、模擬單指拖動及雙指 pinch 後畫面有變化；820×1180 tablet CSS layout 有單一 canvas、4 欄工具格及 ≥44px touch targets；按儲存後 IndexedDB v2 history 可讀回，重載後會自動讀回；待 Service Worker 接管後斷網重載仍可載入 canvas，且無 app runtime／console error（Vite 的預期 HMR 斷線訊息除外）。並驗證 430×932 直向 phone layout 的文件高度不超出 viewport、七個常用工具及「更多工具」入口存在。此為本機 smoke，不能取代 iPhone／iPad Safari 證據。 |
-| 頭顱碰撞展示層 | IMPLEMENTED | 以橢球 collider 保留髮根，對穿頭的 render／pick centerline 線段插入繞行點及對應 Rest arc `s`；HairState 與歷史資料不會被改寫。數值測試檢查示範髮束在捲、剪、增長後各線段均在頭外。髮片三角面、可見捲形剪前後一致性及舊存檔髮根位於頭內的情況仍未解決；後者會保留原資料並回退原始路徑，不能聲稱完全防穿模。 |
+| 頭顱碰撞展示層 | IMPLEMENTED | 以橢球 collider 保留髮根，對穿頭的 render／pick centerline 線段插入繞行點及對應 Rest arc `s`；HairState 與歷史資料不會被改寫。數值測試涵蓋示範髮束捲、剪、增長時的中心線及部分髮片三角面；指定範例的可見髮片剪後保形亦已測試。舊存檔髮根位於頭內時會保留原資料並回退原始路徑，不能聲稱所有情況均已防穿模。 |
 | 直向工具版面 | IMPLEMENTED | iPhone 直向主畫面固定在 viewport 內；旋轉、選取、剪刀、電剪、捲髮器、梳子、增髮及「更多工具」直接可按，餘下造型工具使用 modal drawer 開啟，不需上下捲動。Safari 真機可用性仍待最後一輪驗證。 |
 | 觸控界面實作 | IMPLEMENTED | `pointerdown/move/up/cancel` 旋轉 3D 畫面；canvas 為 `touch-action: none`，所有按鈕與 select 的實際點按高度至少 44px，並由本機 browser smoke 檢查 |
 | 自由檢視手勢 | IMPLEMENTED | 單指可水平旋轉與上下傾斜；兩指 pinch 可在 0.72–2.2 m 相機距離內縮放；尚未真機驗證手勢細節 |
@@ -56,6 +56,7 @@
 
 - iPhone 16 Pro Max 曾由擁有人打開並初步操作較早版本；最新修改未在真機重新驗證，iPad A16、FPS、記憶體、離線與背景恢復仍為 NOT_TESTED。
 - 中段重捲令修改區之前的髮片邊界移位：改用入向切線及 5 mm 固定取樣後，原本偏移約 0.565 mm 的非網格案例通過；16 組指定起點與方向的前綴表面雙向採樣距離 ≤0.5 mm，完整髮片三角面亦通過頭顱碰撞測試。相鄰段安全寬度改用獨立截面並共用細分接縫；原先合成案例的前段偏移約 2.35 mm，修正後保留前段，測試交界前、交界及交界後的裁剪與三角面防穿。此矩陣不是所有捲曲參數或裝置畫面的證明，接縫外觀與效能仍須真機驗證。
+- 接縫組合回歸：在實際示範髮束 D 使用指定捲曲參數，增長至 0.44 m 後出現 0.42 m 接縫；於接縫前、接縫及接縫後剪髮，再增長、序列化／讀取 history、Undo／Redo，對應髮片幾何逐元素一致，剪前／剪後三角面亦通過橢球碰撞檢查。這是程式化參數與 history 序列化測試，並非 iPhone 實測或本案例的 IndexedDB 操作測試。
 - 加密取樣增加運算：本機 Node 單束路徑與髮片重建、預熱後各 30 次的中位數，0.4 m 為約 0.46→1.02 ms，2 m 為約 0.95→2.27 ms；分別由 63→123、203→403 個點。這不是瀏覽器或真機 FPS 測量，裝置效能仍待驗證。
 - 同機 Node 粗略比較接縫修正前後：0.4 m 中位數約 0.70→1.08 ms，2 m 約 1.14→2.13 ms；此兩個示範髮束各為 160／800 個可見三角形，測量受負載與執行期影響，不代表所有頭髮或 iPhone／iPad 效能。
 - Production build 的 Three.js 主 bundle 為約 518 KB（gzip 約 134 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。

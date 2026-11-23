@@ -197,6 +197,55 @@ it('restores extended straight and curled ribbons after saving, loading and redo
   }
 });
 
+it('keeps a real narrowed seam through cut, growth and saved history', async () => {
+  const { parseEditorHistory } = await import('./hair-core');
+  for (const cut of [0.4175, 0.42, 0.4225]) {
+    const editor = new HairEditor(createDemoHairState());
+    expect(editor.curlRange('D', { startS: 0.01, endS: 0.3, radius: 0.04, pitch: 0.12, phase: 1.24, direction: -1 }).changed).toBe(true);
+    expect(editor.growBy('D', 0.14).changed).toBe(true);
+    const strand = (source: HairEditor) => source.exportState().strands.find((item) => item.id === 'D')!;
+    const beforeStrand = strand(editor);
+    const samples = fullHairSamples(beforeStrand, head);
+    const full = buildRibbonGeometryData(samples.map((sample) => sample.point), 0.006, head);
+    expect(full.sampleIndices).toBeDefined();
+    const seamSamples = [...full.sampleIndices!.slice(samples.length * 2)].map((index) => samples[index].s);
+    expect(seamSamples.some((s) => Math.abs(s - 0.42) < 1e-9)).toBe(true);
+    const render = (source: HairEditor) => {
+      const current = strand(source);
+      return buildVisibleRibbon(fullHairSamples(current, head), current.length, 0.006, head);
+    };
+    const fullRibbon = render(editor);
+    const expectedCut = buildVisibleRibbon(samples, cut, 0.006, head);
+    for (const geometry of [fullRibbon, expectedCut]) {
+      for (const triangle of triangles(geometry)) {
+        const normalized = [triangle.a, triangle.b, triangle.c].map((p) => new Vector3(
+          (p.x - head.center[0]) / head.radii[0], (p.y - head.center[1]) / head.radii[1], (p.z - head.center[2]) / head.radii[2],
+        ));
+        const scaled = new Triangle(normalized[0], normalized[1], normalized[2]);
+        const origin = new Vector3();
+        const distance = scaled.getArea() > 1e-12
+          ? scaled.closestPointToPoint(origin, new Vector3()).length()
+          : Math.min(...normalized.map((point, index) => {
+            const next = normalized[(index + 1) % 3];
+            return point.distanceToSquared(next) < 1e-20 ? point.length() : new Line3(point, next).closestPointToPoint(origin, true, new Vector3()).length();
+          }));
+        expect(distance).toBeGreaterThanOrEqual(1 - 1e-6);
+      }
+    }
+    expect(editor.cutAt('D', cut).changed).toBe(true);
+    expect(render(editor)).toEqual(expectedCut);
+    expect(editor.growBy('D', 0.44 - cut).changed).toBe(true);
+    expect(strand(editor).length).toBeCloseTo(0.44);
+    expect(render(editor)).toEqual(fullRibbon);
+    const saved = parseEditorHistory(JSON.stringify(editor.exportHistory()));
+    expect(saved).toBeDefined();
+    const restored = new HairEditor(saved!.current, saved!);
+    expect(render(restored)).toEqual(fullRibbon);
+    restored.undo(); expect(render(restored)).toEqual(expectedCut);
+    restored.redo(); expect(render(restored)).toEqual(fullRibbon);
+  }
+});
+
 it('keeps small tight curls within 0.5 mm when extending a non-grid recorded tip', () => {
   const base = createDemoHairState();
   const editor = new HairEditor({ ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, maximumLength: strand.length } : strand) });
