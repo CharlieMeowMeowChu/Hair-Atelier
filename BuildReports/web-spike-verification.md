@@ -10,7 +10,8 @@
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
-| Service Worker 行為檢查 | PASS | `Tools/test_service_worker.mjs` 模擬驗證舊 cache 清理、導航 network-first、離線 fallback，以及靜態資源 stale-while-revalidate；不取代 Safari 真機快取驗證 |
+| Service Worker 行為檢查 | PASS | `Tools/test_service_worker.mjs` 模擬驗證完整快取、資源格式／完整性、失敗時保護舊 cache、同名 cache 驗證、跨 scope 隔離、更新等待，以及離線背景更新不產生未處理錯誤；不取代 Safari 真機驗證。 |
+| 正式建置離線及更新 | PASS | 本機 Chromium 全新 profile 首次在線載入後停止伺服器，離線重開成功顯示畫布、讀回髮型，離線修改、儲存、再重開及 Undo／Redo 通過。另以子路徑測試損壞資源的更新被拒、舊分頁保持舊版、關閉舊分頁後新版本啟用及離線存檔保留；均非 iPhone／iPad 實測。 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | Production bundle 預算 | PASS | `Tools/check_bundle.mjs`：最大 JS bundle ≤600 KB raw／≤150 KB gzip；此為下載量 regression guard，不取代真機 FPS／memory 量測 |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
@@ -39,7 +40,7 @@
 | 技術 overlay | IMPLEMENTED | 即時顯示 selected strand ID、Rest arc `s`、curl radius/pitch、cut preview `s`、geometry rebuild 毫秒數及最近 120 次 render 的 p95 耗時；render p95 不等於整體 frame time。W04 core 以 schema v2／`ArcLengthSampler` 實作並測試真實 Rest arc length；Safari 真機 Gate 2 仍未完成，見 `Docs/pick-and-constraint-contract.md`。 |
 | 最小 Guide ribbon | IMPLEMENTED | 每條 Rest arc sample 生成窄、雙面的 3D ribbon；以平行傳輸近似保持寬度，重複 sample 仍產生有限幾何。ribbon 只屬 render 衍生物，中心線仍是唯一可編輯資料；不是最終髮絲／髮片美術。 |
 | 局部幾何更新 | IMPLEMENTED | renderer 同時保留每條 GuideStrand 的不可見 Line 拾取中心線與可見 ribbon；只替換資料 signature 改變的兩種 geometry，並在 overlay 顯示本次 rebuild 髮束數；移除的髮束會釋放 geometry/material；A–D 保留示範色，新增穩定 ID 會有決定性 fallback 色，支援日後擴至 20 條導引束 |
-| PWA 基礎 | IMPLEMENTED | manifest、內建 SVG app icon／favicon、iOS standalone／status-bar metadata；service worker 導航採 network-first、靜態資源 stale-while-revalidate，啟用時清理舊版本 cache；語法與行為模擬測試通過，未做離線或加入主畫面真機驗證 |
+| PWA 基礎 | IMPLEMENTED | manifest、內建 SVG app icon／favicon、iOS standalone／status-bar metadata；正式建置為整套 shell 產生內容版本與完整性值，安裝完成後才可離線使用；新版等待舊受控分頁關閉後啟用。開發模式仍使用 runtime cache。未做 Safari 離線或加入主畫面真機驗證。 |
 | 本機儲存／讀取 | IMPLEMENTED | 每次有效髮型操作與 Undo／Redo 寫入 IndexedDB `hair-atelier/editor-history/current-v4`；現行存檔包含當前狀態及最多 20 步 Undo／Redo 歷史，讀取會驗證每個 history snapshot；舊 localStorage v2、v1 history 與 v1 single HairState 會兼容讀取，並在下次儲存或編輯時寫入 IndexedDB；舊 key 保留不刪除；未做 Safari 重開真機驗證 |
 | 啟動讀檔保護 | PASS | 桌面 Chromium 延遲 IndexedDB 開啟期間，儲存、重設及畫布操作被暫停；讀取完成後原存檔與原髮長保留並恢復操作。此為本機模擬，並非 Safari 真機測試。 |
 
@@ -61,7 +62,7 @@
 - 桌面 Chromium 以 IndexedDB 注入髮根位於頭內的有效存檔：顯示警示且手機尺寸不超出畫面，無法安全顯示的髮束不能以指標命中，正常髮束對照可命中；明確儲存後原 history 未改，載入正常存檔後警示消失。此為本機模擬，並非 Safari 真機驗收。
 - 已修正存檔端點容差不一致：曲線與增長以暫態有效區間處理 schema 接受的 1 nm 內重疊／越界，不因讀取或顯示改寫舊數據；測試涵蓋末段續捲、原本直尾、極短重疊段、可見髮片、存讀及 Undo／Redo。若極端退化數值無法穩定求出續接方向，會拒絕該次增長並保留資料。
 - 已修正容差內重疊紀錄重捲後可能無法讀回，以及未選中捲段被誤改方向的問題；重捲依有效區間判斷，保留其他原始紀錄的順序並在提交前驗證資料。若無法安全保留重疊紀錄，該次操作會顯示原因並保留原髮型；此特殊情況尚未支援成功重捲。
-- 離線 app shell 尚未達標：本機全新 Chromium profile 第一次在線開啟 production build，待 Service Worker 接管後停止伺服器再開頁面，重現載入失敗；現有 smoke 的離線成功經多次在線重載，不能代表首次開啟後已具備離線能力。另已重現離線命中快取時背景更新產生未處理錯誤；兩者待修正及真機驗證。
+- 首次離線 app shell 及離線背景更新錯誤已在桌面測試修正；這不代表指定 iPhone／iPad Safari 離線驗收已通過。正式版更新為避免混合版本，會等待舊受控分頁全部關閉後啟用；完整性驗證失敗會保留舊版 cache；若已有不完整的同名 cache 而仍有 active／waiting worker，會拒絕安裝以保護現用資料，這種情況暫未自動修復。
 - 加密取樣增加運算：本機 Node 單束路徑與髮片重建、預熱後各 30 次的中位數，0.4 m 為約 0.46→1.02 ms，2 m 為約 0.95→2.27 ms；分別由 63→123、203→403 個點。這不是瀏覽器或真機 FPS 測量，裝置效能仍待驗證。
 - 同機 Node 粗略比較接縫修正前後：0.4 m 中位數約 0.70→1.08 ms，2 m 約 1.14→2.13 ms；此兩個示範髮束各為 160／800 個可見三角形，測量受負載與執行期影響，不代表所有頭髮或 iPhone／iPad 效能。
 - Production build 的 Three.js 主 bundle 為約 518 KB（gzip 約 134 KB），Vite 發出 chunk-size 警告；已試明確 named imports 而體積無實質下降，尚未做動態模組拆分與 iPhone/iPad 載入／記憶體量測。
@@ -75,6 +76,13 @@
 npm ci
 npm run check
 npm run dev -- --host 127.0.0.1
+```
+
+本機 Chromium 離線與升級驗證（須先完成 `npm run build`）：
+
+```bash
+npm run check:offline-browser
+npm run check:offline-upgrade
 ```
 
 本機 Node 單束重建基準（結果受機器負載影響）：
