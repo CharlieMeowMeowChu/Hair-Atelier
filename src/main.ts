@@ -27,11 +27,20 @@ const appStatus: HTMLElement = status;
 // Do not let a new interaction replace a saved hairstyle before the initial
 // asynchronous IndexedDB read has completed.
 let storageInitialized = false;
+let graphicsState: 'ready' | 'lost' | 'restoring' = 'ready';
+let graphicsGeneration = 0;
 const initialControls = [...document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button, input, select')]
   .map((control) => ({ control, disabled: control.disabled }));
-for (const { control } of initialControls) control.disabled = true;
+function syncControls(): void {
+  for (const { control, disabled } of initialControls) {
+    // Saving an already completed hairstyle remains available during loss.
+    control.disabled = disabled || !storageInitialized || (graphicsState !== 'ready' && control.id !== 'save');
+  }
+}
+syncControls();
 const storageWarning = document.querySelector<HTMLElement>('#storage-warning');
 const renderWarning = document.querySelector<HTMLElement>('#render-warning');
+const contextWarning = document.querySelector<HTMLElement>('#context-warning');
 function showStorageWarning(message: string): void {
   if (!storageWarning) return;
   storageWarning.textContent = message;
@@ -146,20 +155,40 @@ scene.background = new Color('#211c29');
 const camera = new PerspectiveCamera(35, 1, 0.01, 10);
 camera.position.set(0, 0.05, 1.35);
 const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+function graphicsAvailable(): boolean {
+  return graphicsState === 'ready' && !renderer.getContext().isContextLost();
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(stage.clientWidth, stage.clientHeight);
 stage.append(renderer.domElement);
 let renderPending = false;
 const renderMeasurements = new RecentMeasurements();
 function requestRender(): void {
-  if (renderPending) return;
+  if (renderPending || graphicsState === 'lost') return;
   renderPending = true;
   requestAnimationFrame(() => {
     renderPending = false;
+    if (graphicsState === 'lost' || renderer.getContext().isContextLost()) return;
     const startedAt = performance.now();
-    renderer.render(scene, camera);
+    try {
+      renderer.render(scene, camera);
+    } catch {
+      graphicsState = 'lost';
+      graphicsGeneration += 1;
+      cancelActiveGesture();
+      if (toolDrawer?.open) toolDrawer.close();
+      if (contextWarning) { contextWarning.textContent = '3D 畫面暫時無法顯示，已暫停操作；髮型資料仍保留。'; contextWarning.hidden = false; }
+      syncControls();
+      return;
+    }
+    if (renderer.getContext().isContextLost()) return;
     renderMeasurements.add(performance.now() - startedAt);
     if (metrics.render) metrics.render.textContent = renderMeasurements.p95 === undefined ? '—' : `${renderMeasurements.p95.toFixed(2)} ms`;
+    if (graphicsState === 'restoring') {
+      graphicsState = 'ready';
+      if (contextWarning) contextWarning.hidden = true;
+      syncControls();
+    }
   });
 }
 
@@ -597,7 +626,7 @@ function commitTap(tool: Tool, hit: HairHit): void {
   }
 }
 renderer.domElement.addEventListener('pointerdown', (event) => {
-  if (!storageInitialized) return;
+  if (!storageInitialized || !graphicsAvailable()) return;
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (activePointers.size > 1 && tool !== 'rotate') {
     pointer = undefined;
@@ -624,6 +653,7 @@ renderer.domElement.addEventListener('pointerdown', (event) => {
   if (tool !== 'rotate') showCursor(hit);
 });
 renderer.domElement.addEventListener('pointermove', (event) => {
+  if (!graphicsAvailable()) { if (pointer) cancelActiveGesture(); return; }
   if (!activePointers.has(event.pointerId)) return;
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (!pointer || (tool !== 'rotate' && event.pointerId !== pointer.pointerId)) return;
@@ -672,6 +702,7 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   applyViewRotation();
 });
 function finishGesture(event: PointerEvent, cancelled = false): void {
+  if (!graphicsAvailable()) { cancelActiveGesture(); return; }
   if (!activePointers.has(event.pointerId)) return;
   if (cancelled && tool === 'rotate') { cancelActiveGesture(); return; }
   activePointers.delete(event.pointerId);
@@ -767,9 +798,31 @@ renderer.domElement.addEventListener('pointerup', (event) => finishGesture(event
 renderer.domElement.addEventListener('pointercancel', (event) => finishGesture(event, true));
 renderer.domElement.addEventListener('lostpointercapture', (event) => finishGesture(event, true));
 renderer.domElement.addEventListener('pointerleave', () => { if (!pointer) showCursor(undefined); });
-renderer.domElement.addEventListener('pointermove', (event) => { if (!pointer && tool !== 'rotate') showCursor(hitHair(event.clientX, event.clientY)); });
+renderer.domElement.addEventListener('pointermove', (event) => { if (graphicsAvailable() && !pointer && tool !== 'rotate') showCursor(hitHair(event.clientX, event.clientY)); });
 
 const toolDrawer = document.querySelector<HTMLDialogElement>('#tool-drawer');
+// Context loss can become observable immediately before its event is delivered.
+// Do not accept an editing button click in that brief window either.
+document.addEventListener('click', (event) => {
+  const control = event.target instanceof Element ? event.target.closest('button, input, select') : null;
+  if (control && control.id !== 'save' && !graphicsAvailable()) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+}, true);
+renderer.domElement.addEventListener('webglcontextlost', (event) => {
+  event.preventDefault();
+  graphicsState = 'lost';
+  graphicsGeneration += 1;
+  cancelActiveGesture();
+  if (toolDrawer?.open) toolDrawer.close();
+  if (contextWarning) { contextWarning.textContent = '3D 畫面暫時中斷，已暫停操作；髮型資料仍保留。'; contextWarning.hidden = false; }
+  syncControls();
+});
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  graphicsState = 'restoring';
+  requestRender();
+});
 document.querySelector<HTMLButtonElement>('#more-tools')?.addEventListener('click', () => {
   if (!toolDrawer) return;
   if (typeof toolDrawer.showModal === 'function') toolDrawer.showModal();
@@ -816,6 +869,7 @@ document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', ()
   // A second read must not race a failed first read's protection state.
   if (manualLoadInProgress) return;
   manualLoadInProgress = true;
+  const loadGraphicsGeneration = graphicsGeneration;
   void (async () => {
     try {
       await saveQueue.settled();
@@ -825,6 +879,7 @@ document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', ()
       }
       const revision = saveQueue.revision;
       const restored = await loadPersistedEditor();
+      if (graphicsGeneration !== loadGraphicsGeneration || !graphicsAvailable()) { appStatus.textContent = '畫面中斷，已取消讀取並保留目前髮型'; return; }
       if (saveQueue.revision !== revision) { appStatus.textContent = '讀取期間髮型已改變，保留目前操作'; return; }
       if (!restored?.editor) { if (!storageProtected) appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
       storageToken = restored.token;
@@ -880,6 +935,6 @@ void loadPersistedEditor().then((restored) => {
 }).finally(() => {
   storageInitialized = true;
   finishInitialStorageRead();
-  for (const { control, disabled } of initialControls) control.disabled = disabled;
+  syncControls();
   if (appStatus.textContent === '正在讀取本機髮型…') redraw();
 });

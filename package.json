@@ -17,7 +17,8 @@
     "check:offline-build": "node Tools/check_offline_build.mjs",
     "check:offline-browser": "node Tools/first-visit-offline-smoke.mjs",
     "check:offline-upgrade": "node Tools/service-worker-update-smoke.mjs",
-    "check": "npm run test && npm run check:sw && npm run check:pwa && npm run build && npm run check:offline-build && npm run check:bundle"
+    "check": "npm run test && npm run check:sw && npm run check:pwa && npm run build && npm run check:offline-build && npm run check:bundle",
+    "check:context-browser": "node Tools/webgl-context-smoke.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"
