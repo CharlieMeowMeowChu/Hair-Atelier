@@ -811,24 +811,35 @@ document.querySelector<HTMLButtonElement>('#clear-selection')?.addEventListener(
 document.querySelector<HTMLButtonElement>('#save')?.addEventListener('click', () => {
   void persistState().then((saved) => { appStatus.textContent = saved ? '已儲存到本機瀏覽器' : '瀏覽器拒絕本機儲存'; });
 });
+let manualLoadInProgress = false;
 document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', () => {
+  // A second read must not race a failed first read's protection state.
+  if (manualLoadInProgress) return;
+  manualLoadInProgress = true;
   void (async () => {
-    await saveQueue.settled();
-    if (hasUnsavedChanges && !window.confirm('目前髮型有未儲存的修改。讀取存檔會取代這些修改，繼續嗎？')) {
-      appStatus.textContent = '已取消讀取；保留目前髮型';
-      return;
+    try {
+      await saveQueue.settled();
+      if (hasUnsavedChanges && !window.confirm('目前髮型有未儲存的修改。讀取存檔會取代這些修改，繼續嗎？')) {
+        appStatus.textContent = '已取消讀取；保留目前髮型';
+        return;
+      }
+      const revision = saveQueue.revision;
+      const restored = await loadPersistedEditor();
+      if (saveQueue.revision !== revision) { appStatus.textContent = '讀取期間髮型已改變，保留目前操作'; return; }
+      if (!restored?.editor) { if (!storageProtected) appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
+      storageToken = restored.token;
+      storageConflict = false;
+      hasUnsavedChanges = false;
+      editor = restored.editor;
+      // Clear protection only after a validated snapshot has been accepted and
+      // its matching storage token installed; rejected reads stay protected.
+      storageProtected = false;
+      if (storageWarning) storageWarning.hidden = true;
+      redraw();
+      appStatus.textContent = '已讀取本機儲存與操作歷史';
+    } finally {
+      manualLoadInProgress = false;
     }
-    const revision = saveQueue.revision;
-    const restored = await loadPersistedEditor();
-    if (saveQueue.revision !== revision) { appStatus.textContent = '讀取期間髮型已改變，保留目前操作'; return; }
-    if (!restored?.editor) { if (!storageProtected) appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
-    storageToken = restored.token;
-    storageConflict = false;
-    hasUnsavedChanges = false;
-    if (storageWarning && !storageProtected) storageWarning.hidden = true;
-    editor = restored.editor;
-    redraw();
-    appStatus.textContent = '已讀取本機儲存與操作歷史';
   })();
 });
 document.querySelector<HTMLButtonElement>('#reset')?.addEventListener('click', () => {

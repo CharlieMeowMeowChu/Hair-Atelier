@@ -517,6 +517,42 @@ try {
     };
   })`);
   parsed.corruptStorageProtected = parsed.corruptStorageProtected && protectedValue === '{damaged-v4';
+  // A transient startup read failure must protect existing data, but a later
+  // successful explicit Load should allow edits to be saved in this page.
+  await storageWrite(startupSerialized, legacySerialized);
+  const failOpen = await client.command('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+    const original = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function () { throw new Error('Simulated temporary IndexedDB failure'); };
+    globalThis.__restoreHairStorageOpen = () => { IDBFactory.prototype.open = original; };
+  })();` });
+  await client.command('Page.navigate', { url: appUrl });
+  const temporaryFailureWarned = await waitStatus('本機儲存暫時無法讀取');
+  await evaluate(client, 'globalThis.__restoreHairStorageOpen()');
+  await client.command('Page.removeScriptToEvaluateOnNewDocument', { identifier: failOpen.identifier });
+  const afterTemporaryFailure = await evaluate(client, "import('/src/indexeddb-storage.ts').then(module => module.readEditorHistory()).then(result => result.value)");
+  await evaluate(client, "document.querySelector('#load').click()");
+  const recoveredLoad = await waitStatus('已讀取本機儲存與操作歷史');
+  const recoveredView = await evaluate(client, `document.querySelector('#status')?.textContent?.includes('已讀取本機儲存與操作歷史') && document.querySelector('#storage-warning').hidden`);
+  await evaluate(client, "document.querySelector('#reset').click(); document.querySelector('#save').click()");
+  const recoveredSaveDeadline = Date.now() + 5_000;
+  let recoveredSave = false;
+  while (Date.now() < recoveredSaveDeadline) {
+    const saveStatus = await evaluate(client, "document.querySelector('#status')?.textContent ?? ''");
+    if (saveStatus.includes('已儲存到本機瀏覽器')) { recoveredSave = true; break; }
+    if (saveStatus.includes('瀏覽器拒絕本機儲存')) break;
+    await delay(100);
+  }
+  const recoveredHistory = await evaluate(client, "import('/src/indexeddb-storage.ts').then(module => module.readEditorHistory()).then(result => result.value)");
+  let savedResetLength = false;
+  try { savedResetLength = JSON.parse(recoveredHistory).current.strands.find((strand) => strand.id === 'C').length === 0.4; } catch { /* Invalid or missing history fails the assertion. */ }
+  await client.command('Page.navigate', { url: appUrl });
+  const recoveredReload = await waitStatus('已自動讀取本機儲存與操作歷史');
+  await evaluate(client, "document.querySelector('[data-tool=rotate]').click()");
+  const recoveredReloadLength = await evaluate(client, "document.querySelector('#status')?.textContent?.includes('C：40 cm') ?? false");
+  parsed.storageRecoveryChecks = { temporaryFailureWarned, dataPreserved: afterTemporaryFailure === startupSerialized,
+    recoveredLoad, recoveredView, recoveredSave, savedResetLength, recoveredReload, recoveredReloadLength };
+  parsed.storageRecoveryValid = !!(temporaryFailureWarned && afterTemporaryFailure === startupSerialized && recoveredLoad && recoveredView
+    && recoveredSave && savedResetLength && recoveredReload && recoveredReloadLength);
   const oversizedHistory = JSON.parse(indexedHistory);
   oversizedHistory.undo.push(structuredClone(oversizedHistory.current));
   oversizedHistory.undo.at(-1).strands[0].maximumLength = 1e100;
@@ -706,10 +742,10 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.startupReady || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.twoFingerPanValid || !parsed.longTailPanCutValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.curlSpanControlValid || !parsed.middleRecurlFlowValid || !parsed.collisionFailureGuardValid || !parsed.startupLoadGuardValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.v3IndexedDbLoaded || !parsed.v3UpgradeSaved || !parsed.corruptV3Protected || !parsed.v3RaceRejected || !parsed.corruptStorageProtected || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.startupReady || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.twoFingerPanValid || !parsed.longTailPanCutValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.curlSpanControlValid || !parsed.middleRecurlFlowValid || !parsed.collisionFailureGuardValid || !parsed.startupLoadGuardValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.v3IndexedDbLoaded || !parsed.v3UpgradeSaved || !parsed.corruptV3Protected || !parsed.v3RaceRejected || !parsed.corruptStorageProtected || !parsed.storageRecoveryValid || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, twoFingerPanValid=${parsed.twoFingerPanValid}, longTailPanCutValid=${parsed.longTailPanCutValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, curlSpanControlValid=${parsed.curlSpanControlValid}, middleRecurlFlowValid=${parsed.middleRecurlFlowValid}, collisionFailureGuardValid=${parsed.collisionFailureGuardValid}, startupLoadGuardValid=${parsed.startupLoadGuardValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, v3IndexedDbLoaded=${parsed.v3IndexedDbLoaded}, v3UpgradeSaved=${parsed.v3UpgradeSaved}, corruptV3Protected=${parsed.corruptV3Protected}, v3RaceRejected=${parsed.v3RaceRejected}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, twoFingerPanValid=${parsed.twoFingerPanValid}, longTailPanCutValid=${parsed.longTailPanCutValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, curlSpanControlValid=${parsed.curlSpanControlValid}, middleRecurlFlowValid=${parsed.middleRecurlFlowValid}, collisionFailureGuardValid=${parsed.collisionFailureGuardValid}, startupLoadGuardValid=${parsed.startupLoadGuardValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, v3IndexedDbLoaded=${parsed.v3IndexedDbLoaded}, v3UpgradeSaved=${parsed.v3UpgradeSaved}, corruptV3Protected=${parsed.corruptV3Protected}, v3RaceRejected=${parsed.v3RaceRejected}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, storageRecoveryValid=${parsed.storageRecoveryValid}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
   secondClient?.close();
   client?.close();
