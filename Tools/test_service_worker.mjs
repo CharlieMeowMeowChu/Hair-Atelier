@@ -106,6 +106,15 @@ function navigation(url) {
   Object.defineProperty(request, 'mode', { value: 'navigate' });
   return request;
 }
+async function queryOfflineStatus(harness) {
+  let reply;
+  const pending = [];
+  const handler = harness.listeners.get('message');
+  if (!handler) throw new Error('Offline readiness message handler is missing');
+  handler({ data: { type: 'HAIR_OFFLINE_STATUS_REQUEST' }, ports: [{ postMessage: (value) => { reply = value; } }], waitUntil: (promise) => pending.push(Promise.resolve(promise)) });
+  await Promise.all(pending);
+  return reply;
+}
 
 // Seed another app's cache with the same asset URL so global caches.match()
 // would retrieve the wrong response even after this app's old cache is removed.
@@ -135,6 +144,14 @@ await Promise.all(activation);
 if (shared.has(`${scopePrefix}old`)) throw new Error('Old cache for this scope was not cleaned after successful activation');
 if (!shared.has(`${otherPrefix}other`) || !shared.has('hair-atelier-shell-v2')) throw new Error('Activation deleted an unrelated or unscoped cache');
 if (!shared.has(currentNames[0])) throw new Error('Activation removed the current production cache');
+if (!(await queryOfflineStatus(prod))?.ready) throw new Error('Complete production cache was not reported ready');
+const statusAsset = new Request(address('./assets/app-hash.js'));
+const savedStatusAsset = await current.match(statusAsset);
+await current.delete(statusAsset);
+if ((await queryOfflineStatus(prod))?.ready) throw new Error('Missing cache entry was reported ready');
+await current.put(statusAsset, new Response('tampered', { headers: { 'content-type': 'application/javascript' } }));
+if ((await queryOfflineStatus(prod))?.ready) throw new Error('Tampered cache entry was reported ready');
+await current.put(statusAsset, savedStatusAsset);
 const callsBeforeNavigation = prod.requests.length;
 const cachedNavigation = await triggerFetch(prod, navigation(`${scope}?session=1`));
 if (await cachedNavigation.text() !== `network:${address('./index.html')}` || prod.requests.length !== callsBeforeNavigation) {
@@ -236,6 +253,7 @@ for (const failure of ['network', 'http', 'mime', 'redirect', 'put']) {
 // Runtime navigation caching remains available in development without a
 // production-injected precache manifest.
 const dev = createHarness();
+if ((await queryOfflineStatus(dev))?.ready) throw new Error('Development runtime cache was reported as a complete offline shell');
 const firstNavigation = navigation('https://hair.test/app/');
 if (await (await triggerFetch(dev, firstNavigation)).text() !== `network:${scope}`) throw new Error('Navigation did not use network response');
 dev.sandbox.fetch = async () => { throw new Error('offline navigation'); };

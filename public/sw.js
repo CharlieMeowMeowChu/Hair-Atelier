@@ -28,6 +28,27 @@ async function matchesIntegrity(response, expected) {
   return `sha256-${btoa(binary)}` === expected;
 }
 
+// Report readiness only for this worker's complete, verified production shell.
+// Browsers can evict Cache Storage after installation, so recheck on request.
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'HAIR_OFFLINE_STATUS_REQUEST' || !event.ports?.[0]) return;
+  event.waitUntil((async () => {
+    let ready = false;
+    try {
+      const required = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+      const hasShell = required.every((path) => precachePaths.includes(path)) &&
+        precachePaths.some((path) => path.endsWith('.js')) && precachePaths.some((path) => path.endsWith('.css'));
+      if (hasShell && (await caches.keys()).includes(CACHE)) {
+        const cache = await caches.open(CACHE);
+        const responses = await Promise.all(precacheUrls.map((url) => cache.match(url, { ignoreVary: true })));
+        ready = responses.every((response, index) => response && validShellResponse(precacheUrls[index], response)) &&
+          (await Promise.all(responses.map((response, index) => matchesIntegrity(response, precacheIntegrity[precachePaths[index]])))).every(Boolean);
+      }
+    } catch { /* Missing, unreadable or incomplete cache is not ready. */ }
+    event.ports[0].postMessage({ type: 'HAIR_OFFLINE_STATUS', ready });
+  })());
+});
+
 self.addEventListener('install', (event) => event.waitUntil((async () => {
   if (precachePaths.some((path) => !/^sha256-[A-Za-z0-9+/]{43}=$/.test(precacheIntegrity[path] ?? ''))) {
     throw new Error('Offline shell integrity information is missing');

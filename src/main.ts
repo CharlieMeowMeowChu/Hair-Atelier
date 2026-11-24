@@ -19,6 +19,7 @@ import { nearestVisibleHairHit } from './occlusion';
 import { clipSweepToBounds, sweepStepPixels } from './sweep-sampling';
 import { panCamera, type PanPosition } from './camera-pan';
 import { canRenderHistory } from './runtime-budget';
+import { monitorOfflineStatus } from './offline-status';
 
 function startApp(): void {
   const stage = document.querySelector<HTMLElement>('#stage');
@@ -939,7 +940,8 @@ function startApp(): void {
     requestRender();
   }).observe(stage);
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => undefined);
+  const offlineStatus = document.querySelector<HTMLElement>('#offline-status');
+  if (offlineStatus) monitorOfflineStatus(offlineStatus);
   redraw();
   appStatus.textContent = '正在讀取本機髮型…';
   const initialRevision = saveQueue.revision;

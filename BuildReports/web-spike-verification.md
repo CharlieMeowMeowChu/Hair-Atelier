@@ -12,6 +12,7 @@
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
 | Service Worker 行為檢查 | PASS | `Tools/test_service_worker.mjs` 模擬驗證完整快取、資源格式／完整性、失敗時保護舊 cache、同名 cache 驗證、跨 scope 隔離、更新等待，以及離線背景更新不產生未處理錯誤；不取代 Safari 真機驗證。 |
 | 正式建置離線及更新 | PASS | 本機 Chromium 全新 profile 首次在線載入後停止伺服器，離線重開成功顯示畫布、讀回髮型，離線修改、儲存、再重開及 Undo／Redo 通過。另以子路徑測試損壞資源的更新被拒、舊分頁保持舊版、關閉舊分頁後新版本啟用及離線存檔保留；均非 iPhone／iPad 實測。 |
+| 離線準備提示 | PASS | 桌面 Chromium 子路徑正式建置驗證首次下載中、完整快取後顯示備妥、資源校驗失敗與快取被刪除後不顯示備妥；亦驗證損壞更新保留舊版提示、更新等待及新版本啟用。Worker 會重新驗證現用 shell 的資源完整性；不是 Safari 真機驗收。 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | Production bundle 預算 | PASS | `Tools/check_bundle.mjs`：最大 JS bundle ≤600 KB raw／≤150 KB gzip；此為下載量 regression guard，不取代真機 FPS／memory 量測 |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
@@ -67,6 +68,7 @@
 - 已修正容差內重疊紀錄重捲後可能無法讀回，以及未選中捲段被誤改方向的問題；重捲依有效區間判斷，保留其他原始紀錄的順序並在提交前驗證資料。若無法安全保留重疊紀錄，該次操作會顯示原因並保留原髮型；此特殊情況尚未支援成功重捲。
 - 瀏覽器若沒有恢復 WebGL，或渲染因其他原因拋錯，畫面維持提示並暫停編輯，仍可嘗試儲存；首次建立 WebGLRenderer 失敗時可顯示提示並由使用者重新載入，能否成功取決於瀏覽器及裝置；之後其他初始化步驟拋錯未在此回歸範圍內。指定 iPhone／iPad 的中斷恢復未測。
 - 儲存保護僅在手動讀取並採納有效存檔後解除；若仍讀不到有效存檔，保護維持啟用，暫未提供在無存檔情況下解除保護的流程。
+- 離線提示表示最近一次檢查時程式 shell 完整，不保證瀏覽器稍後不會清理快取，亦不代表存檔寫入已成功；頁面回到前景或網絡狀態改變時會再檢查。指定裝置 Safari 仍未驗證。
 - 首次離線 app shell 及離線背景更新錯誤已在桌面測試修正；這不代表指定 iPhone／iPad Safari 離線驗收已通過。正式版更新為避免混合版本，會等待舊受控分頁全部關閉後啟用；完整性驗證失敗會保留舊版 cache；若已有不完整的同名 cache 而仍有 active／waiting worker，會拒絕安裝以保護現用資料，這種情況暫未自動修復。
 - 加密取樣增加運算：本機 Node 單束路徑與髮片重建、預熱後各 30 次的中位數，0.4 m 為約 0.46→1.02 ms，2 m 為約 0.95→2.27 ms；分別由 63→123、203→403 個點。這不是瀏覽器或真機 FPS 測量，裝置效能仍待驗證。
 - 同機 Node 粗略比較接縫修正前後：0.4 m 中位數約 0.70→1.08 ms，2 m 約 1.14→2.13 ms；此兩個示範髮束各為 160／800 個可見三角形，測量受負載與執行期影響，不代表所有頭髮或 iPhone／iPad 效能。
@@ -87,6 +89,7 @@ npm run dev -- --host 127.0.0.1
 
 ```bash
 npm run check:offline-browser
+npm run check:offline-readiness
 npm run check:offline-upgrade
 npm run check:context-browser
 npm run check:startup-browser

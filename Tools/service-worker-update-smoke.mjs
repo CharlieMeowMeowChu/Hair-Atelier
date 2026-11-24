@@ -101,6 +101,7 @@ try {
   const oldTarget = (await control.command('Target.createTarget', { url: appUrl })).targetId;
   old = await attach(oldTarget);
   await until(old, "!!document.querySelector('#stage canvas') && !!navigator.serviceWorker.controller && !document.querySelector('#save').disabled", 'initial shell');
+  await until(old, "document.querySelector('#offline-status')?.dataset.state === 'ready'", 'original shell readiness');
   await evaluate(old, "document.querySelector('#save').click()");
   await until(old, "document.querySelector('#status')?.textContent.includes('已儲存到本機瀏覽器')", 'save');
   const saved = await evaluate(old, savedText);
@@ -114,16 +115,22 @@ try {
   await until(old, "window.__swStates.includes('redundant')", 'bad SRI worker rejected');
   const badCheck = await evaluate(old, `(async()=>({waiting:!!(await navigator.serviceWorker.getRegistration()).waiting,caches:await caches.keys(),saved:await (${savedText})}))()`);
   if (badCheck.waiting || !badCheck.caches.includes(oldName) || badCheck.caches.some((n) => n.includes('bad-')) || badCheck.saved !== saved) throw new Error(`Failed SRI update affected active cache or history: ${JSON.stringify(badCheck)}`);
+  await until(old, "document.querySelector('#offline-status')?.dataset.state === 'ready'", 'existing shell remains ready after rejected update');
+  if (await evaluate(old, "document.querySelector('#offline-status').textContent.includes('更新')")) throw new Error('Rejected update was reported as ready to apply');
 
   deployment = 'new';
   await evaluate(old, update);
   await until(old, "navigator.serviceWorker.getRegistration().then(r=>!!r.waiting)", 'new worker waiting');
+  await until(old, "document.querySelector('#offline-status')?.dataset.state === 'waiting'", 'old shell readiness with waiting update');
+  if (!(await evaluate(old, "document.querySelector('#offline-status').textContent.includes('離線') && document.querySelector('#offline-status').textContent.includes('更新')"))) throw new Error('Waiting status does not distinguish old shell readiness and update');
   await old.command('Page.navigate', { url: `${appUrl}?old-client=1` });
   await until(old, "!!document.querySelector('#stage canvas') && !document.querySelector('#save').disabled", 'old page after reload');
+  await until(old, "document.querySelector('#offline-status')?.dataset.state === 'waiting'", 'waiting status after old page reload');
   if (await evaluate(old, "!!document.querySelector('meta[name=hair-update-test]')") || await evaluate(old, savedText) !== saved) throw new Error('Old controlled page mixed in the new shell or changed history');
   const extraTarget = (await control.command('Target.createTarget', { url: appUrl })).targetId;
   extra = await attach(extraTarget);
   await until(extra, "!!document.querySelector('#stage canvas') && !!navigator.serviceWorker.controller", 'second old controlled tab');
+  await until(extra, "document.querySelector('#offline-status')?.dataset.state === 'waiting'", 'waiting status in second old tab');
   if (await evaluate(extra, "!!document.querySelector('meta[name=hair-update-test]')")) throw new Error('New tab switched before old controlled tabs closed');
   await control.command('Target.closeTarget', { targetId: oldTarget }); old.close(); old = undefined;
   await control.command('Target.closeTarget', { targetId: extraTarget }); extra.close(); extra = undefined;
@@ -131,6 +138,7 @@ try {
   const newTarget = (await control.command('Target.createTarget', { url: appUrl })).targetId;
   newer = await attach(newTarget);
   await until(newer, "!!document.querySelector('#stage canvas') && !!navigator.serviceWorker.controller && !document.querySelector('#save').disabled", 'new worker page');
+  await until(newer, "document.querySelector('#offline-status')?.dataset.state === 'ready'", 'new active shell readiness');
   if (!(await evaluate(newer, "!!document.querySelector('meta[name=hair-update-test]')"))) throw new Error('New shell did not activate after old tabs closed');
   if (await evaluate(newer, savedText) !== saved) throw new Error('Worker update changed saved history');
   const remainingCaches = await evaluate(newer, 'caches.keys()');
@@ -141,8 +149,9 @@ try {
   const navigation = await newer.command('Page.navigate', { url: appUrl });
   if (navigation.errorText) throw new Error(`Updated shell failed offline: ${navigation.errorText}`);
   await until(newer, "!!document.querySelector('#stage canvas') && !document.querySelector('#save').disabled && !!document.querySelector('meta[name=hair-update-test]')", 'updated shell offline');
+  await until(newer, "document.querySelector('#offline-status')?.dataset.state === 'ready'", 'updated shell offline readiness');
   if (await evaluate(newer, savedText) !== saved) throw new Error('Offline updated shell did not retain history');
-  console.log('Service-worker update smoke passed: subpath, SRI rejection, waiting tabs, activation and offline history');
+  console.log('Service-worker update smoke passed: subpath, SRI rejection, readiness UI, waiting tabs, activation and offline history');
 } finally {
   old?.close(); extra?.close(); newer?.close(); control?.close();
   if (server.listening) await new Promise((ok) => server.close(ok));
