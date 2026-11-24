@@ -1,6 +1,6 @@
 import { assessActionIntent } from './constraint-graph';
 import { curlContinuationFrame, restPointAt } from './arc-length';
-import { terminalRecordedCurlIndex, restArcToleranceMeters } from './arc-boundaries';
+import { effectiveCurlIntervals, terminalRecordedCurlIndex, restArcToleranceMeters } from './arc-boundaries';
 
 export type Vec3 = readonly [number, number, number];
 
@@ -566,22 +566,39 @@ export class HairEditor {
     const limited = { ...curl, frameRoll: undefined, orientationMode: 'phase-v1' as const, endS: visibleEndS };
     const constraint = assessActionIntent(this.state, { type: 'curl', strandId, startS: limited.startS, endS: visibleEndS });
     if (constraint.decision !== 'Allowed') return { changed: false, reason: constraint.message, strandId };
-    const retained: CurlSegment[] = [];
-    for (const existing of strand.curls) {
-      if (existing.endS <= limited.startS || existing.startS >= limited.endS) {
-        retained.push(existing);
+    // The schema tolerates tiny overlaps, so raw starts need not be strictly
+    // sorted. Preserve their original order on each side of the new range.
+    const before: CurlSegment[] = [];
+    const after: CurlSegment[] = [];
+    const effective = new Map(effectiveCurlIntervals(strand).map((entry) => [entry.index, entry.curl]));
+    for (let index = 0; index < strand.curls.length; index += 1) {
+      const existing = strand.curls[index];
+      const interval = effective.get(index);
+      if (!interval) {
+        // A fully covered raw record still belongs to the saved hairstyle.
+        // Keep it; the candidate validation below rejects unsafe placement.
+        (existing.startS < limited.startS ? before : after).push(existing);
         continue;
       }
-      if (existing.startS < limited.startS) retained.push({ ...existing, endS: limited.startS });
-      if (existing.endS > limited.endS) {
+      if (interval.endS <= limited.startS) {
+        before.push(existing);
+        continue;
+      }
+      if (interval.startS >= limited.endS) {
+        after.push(existing);
+        continue;
+      }
+      if (interval.startS < limited.startS) before.push({ ...existing, endS: limited.startS });
+      if (interval.endS > limited.endS) {
         const frame = curlContinuationFrame(strand, limited.endS);
         if (!frame) return { changed: false, reason: '無法安全保留原有捲髮後段', strandId };
-        retained.push({ ...existing, startS: limited.endS, frameRoll: frame.roll });
+        after.push({ ...existing, startS: limited.endS, frameRoll: frame.roll });
       }
     }
+    const updated = { ...strand, curls: [...before, limited, ...after] };
+    if (!strandIsValid(updated, true)) return { changed: false, reason: '無法安全套用此捲髮範圍，原髮型已保留', strandId };
     this.saveUndo();
-    const curls = [...retained, limited].sort((a, b) => a.startS - b.startS);
-    this.state = replaceStrand(this.state, { ...strand, curls });
+    this.state = replaceStrand(this.state, updated);
     return { changed: true, strandId, oldLength: strand.length, newLength: strand.length };
   }
 

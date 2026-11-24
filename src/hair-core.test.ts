@@ -530,6 +530,37 @@ it('re-curls only a middle interval while preserving the original suffix shape a
   expect(restored.exportState().strands.find((s) => s.id === 'C')!.curls.at(-1)?.frameRoll).toBeTypeOf('number');
 });
 
+it('preserves an untouched curl whose raw start overlaps the prior curl only within tolerance', async () => {
+  const { restPointAt } = await import('./arc-length');
+  const base = createDemoHairState();
+  const first = { startS: 0.04, endS: 0.2000000005, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+  const next = { startS: 0.2, endS: 0.35, radius: 0.04, pitch: 0.06, phase: 0.8, direction: -1 as const };
+  const replacement = { startS: 0.15, endS: 0.2000000003, radius: 0.015, pitch: 0.04, phase: 1.1, direction: 1 as const };
+  const makeState = (startS: number) => ({ ...base, strands: base.strands.map((strand) =>
+    strand.id === 'C' ? { ...strand, curls: [first, { ...next, startS }] } : strand) });
+  const original = parseHairState(JSON.stringify(makeState(next.startS)));
+  const normalized = parseHairState(JSON.stringify(makeState(first.endS)));
+  expect(original).toBeDefined();
+  expect(normalized).toBeDefined();
+  const actualEditor = new HairEditor(original!);
+  const referenceEditor = new HairEditor(normalized!);
+  expect(actualEditor.curlRange('C', replacement).changed).toBe(true);
+  expect(referenceEditor.curlRange('C', replacement).changed).toBe(true);
+  const actual = actualEditor.exportState().strands.find((strand) => strand.id === 'C')!;
+  const reference = referenceEditor.exportState().strands.find((strand) => strand.id === 'C')!;
+  expect(actual.curls.find((curl) => curl.radius === next.radius)).toEqual(next);
+  for (const s of [0.21, 0.25, 0.3, 0.35]) {
+    const a = restPointAt(actual, s), b = restPointAt(reference, s);
+    expect(Math.hypot(...a.map((value, index) => value - b[index]))).toBeLessThan(1e-7);
+  }
+  expect(actualEditor.exportState().strands.filter((strand) => strand.id !== 'C')).toEqual(original!.strands.filter((strand) => strand.id !== 'C'));
+  const history = parseEditorHistory(JSON.stringify(actualEditor.exportHistory()));
+  expect(history).toBeDefined();
+  const restored = new HairEditor(history!.current, history!);
+  restored.undo(); expect(restored.exportState()).toEqual(original);
+  restored.redo(); expect(restored.exportState()).toEqual(actualEditor.exportState());
+});
+
 it('protects unversioned data and an unstable retained curl frame', () => {
   const base = createDemoHairState();
   const tiny = { startS: 0.04, endS: 0.3, radius: 1e-20, pitch: 1, phase: 0.2, direction: 1 as const };
@@ -576,4 +607,43 @@ it('restores a recorded straight tail after curling only the visible cut tip', a
   restored.undo(); expect(restored.exportState()).toEqual(cut);
   restored.redo(); expect(restored.exportState()).toEqual(curled);
   restored.redo(); expect(restored.exportState()).toEqual(grown);
+});
+
+it('preserves tolerated overlapping records when re-curling and reloading history', () => {
+  const base = createDemoHairState();
+  const first = { startS: 0.04, endS: 0.2, radius: 0.025, pitch: 0.08, phase: 0.3, direction: 1 as const };
+  const template = { radius: 0.04, pitch: 0.08, phase: 0.3, direction: -1 as const };
+  const tiny1 = { ...template, startS: 0.1999999991, endS: 0.1999999992 };
+  const tiny2 = { ...template, startS: 0.1999999983, endS: 0.1999999984 };
+  const last = { ...template, startS: 0.1999999975, endS: 0.35 };
+  const state = { ...base, strands: base.strands.map((strand) => strand.id === 'C' ? { ...strand, curls: [first, tiny1, tiny2, last] } : strand) };
+  const parsed = parseHairState(JSON.stringify(state));
+  expect(parsed).toBeDefined();
+  const protectedEditor = new HairEditor(parsed!);
+  const protectedHistory = protectedEditor.exportHistory();
+  const unsafe = protectedEditor.curlRange('C', { startS: 0.15, endS: 0.3, radius: 0.015, pitch: 0.05, phase: 0.8, direction: 1 });
+  expect(unsafe.changed).toBe(false);
+  expect(unsafe.reason).toContain('原髮型已保留');
+  expect(protectedEditor.exportHistory()).toEqual(protectedHistory);
+  const editor = new HairEditor(parsed!);
+  const before = editor.exportState();
+  expect(editor.curlRange('C', { startS: 0.25, endS: 0.3, radius: 0.015, pitch: 0.05, phase: 0.8, direction: 1 }).changed).toBe(true);
+  const after = editor.exportState();
+  const previous = before.strands.find((strand) => strand.id === 'C')!;
+  const updated = after.strands.find((strand) => strand.id === 'C')!;
+  expect(updated.curls.slice(0, 3)).toEqual([first, tiny1, tiny2]);
+  expect(updated.curls[3]).toMatchObject({ ...last, endS: 0.25 });
+  expect(updated.curls[4]).toMatchObject({ startS: 0.25, endS: 0.3, radius: 0.015, pitch: 0.05, direction: 1 });
+  expect(updated.curls[5]).toMatchObject({ ...last, startS: 0.3 });
+  for (const s of [0, 0.1, 0.2, 0.21, 0.24]) {
+    const a = pointAt(previous, s), b = pointAt(updated, s);
+    expect(Math.hypot(...a.map((value, index) => value - b[index]))).toBeLessThan(1e-9);
+  }
+  expect(after.strands.filter((strand) => strand.id !== 'C')).toEqual(before.strands.filter((strand) => strand.id !== 'C'));
+  const history = parseEditorHistory(JSON.stringify(editor.exportHistory()));
+  expect(history).toBeDefined();
+  const restored = new HairEditor(history!.current, history!);
+  expect(restored.exportState()).toEqual(after);
+  restored.undo(); expect(restored.exportState()).toEqual(before);
+  restored.redo(); expect(restored.exportState()).toEqual(after);
 });
