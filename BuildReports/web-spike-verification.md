@@ -1,6 +1,6 @@
 # Web Core Spike 驗證紀錄
 
-最新驗證：2026-11-24（香港）。分支：`phase0/environment-readiness`。
+最新驗證：2026-11-26（香港）。分支：`phase0/environment-readiness`。
 
 ## 已通過
 
@@ -22,6 +22,7 @@
 | 觸控界面實作 | IMPLEMENTED | `pointerdown/move/up/cancel` 旋轉 3D 畫面；canvas 為 `touch-action: none`，所有按鈕與 select 的實際點按高度至少 44px，並由本機 browser smoke 檢查 |
 | 自由檢視手勢 | IMPLEMENTED | 單指可水平旋轉與上下傾斜；兩指 pinch 可在 0.72–2.2 m 相機距離內縮放；尚未真機驗證手勢細節 |
 | 工具／鏡頭手勢優先序 | IMPLEMENTED | 只有「旋轉」模式可轉頭或縮放；選取、造型及剪髮工具的 pointer move 不會穿透成鏡頭操作；造型中出現第二指會取消未提交手勢，避免誤剪；真機多點觸控仍待驗證 |
+| 多指誤操作保護 | PASS | 桌面 Chromium 真實 CDP 觸控測試涵蓋增髮與剪刀：三指、先接觸介面再觸畫布、首指抬起後加入新指，均無意外修改髮型及 IndexedDB 歷史；系統觸控取消後資料保留，所有手指離開後單指操作恢復。既有雙指旋轉縮放及平移 smoke 仍通過；Safari 真機未測。 |
 | 回正面視角 | IMPLEMENTED | 將水平／垂直旋轉及縮放重設為固定正面視角；不修改任何 HairState 或 Undo／Redo 歷史 |
 | 觸控剪／捲／增長原型 | IMPLEMENTED | 剪刀會把 Three.js Line 命中的 rendered segment 投影並插值為 Rest arc `s`，再累積拖掃最低值，放手才 Cut；仍未使用完整 PickProxy／capsule 可見性策略。剪刀與捲髮器單次點按不會誤套用，兩者均須拖過 6 px；捲髮器對命中束的局部區間建立 Curl；增髮只對點按的髮束 Grow；Undo／Redo／重設可用 |
 | 電剪原型 | IMPLEMENTED | 1–20 cm 可調 guard length；拖掃命中束後放手才以該長度修短，單次點按不會誤剪，已短於 guard 的髮束不變；一次手勢一個 Undo |
@@ -61,6 +62,7 @@
 
 ## 尚未通過／未聲稱完成
 
+- 多指保護仍依賴瀏覽器交付接觸結束或取消事件；若系統吞掉這些事件且沒有失焦／背景通知，可能保守地維持編輯鎖定。iPhone／iPad Safari 系統手勢及恢復次序仍須真機測試。
 - iPhone 16 Pro Max 曾由擁有人打開並初步操作較早版本；最新修改未在真機重新驗證，iPad A16、FPS、記憶體、離線與背景恢復仍為 NOT_TESTED。
 - 中段重捲令修改區之前的髮片邊界移位：改用入向切線及 5 mm 固定取樣後，原本偏移約 0.565 mm 的非網格案例通過；16 組指定起點與方向的前綴表面雙向採樣距離 ≤0.5 mm，完整髮片三角面亦通過頭顱碰撞測試。相鄰段安全寬度改用獨立截面並共用細分接縫；原先合成案例的前段偏移約 2.35 mm，修正後保留前段，測試交界前、交界及交界後的裁剪與三角面防穿。此矩陣不是所有捲曲參數或裝置畫面的證明，接縫外觀與效能仍須真機驗證。
 - 接縫組合回歸：在實際示範髮束 D 使用指定捲曲參數，增長至 0.44 m 後出現 0.42 m 接縫；於接縫前、接縫及接縫後剪髮，再增長、序列化／讀取 history、Undo／Redo，對應髮片幾何逐元素一致，剪前／剪後三角面亦通過橢球碰撞檢查。這是程式化參數與 history 序列化測試，並非 iPhone 實測或本案例的 IndexedDB 操作測試。
@@ -94,6 +96,7 @@ npm run check:offline-browser
 npm run check:offline-readiness
 npm run check:offline-upgrade
 npm run check:context-browser
+npm run check:multitouch-browser
 npm run check:startup-browser
 ```
 

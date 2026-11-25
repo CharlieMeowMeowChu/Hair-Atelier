@@ -513,18 +513,48 @@ function startApp(): void {
     highlightHair();
     requestRender();
   }
-  // A second finger can touch UI rather than the canvas, so observe the whole page.
+  // Track physical contacts across the page separately from the canvas gesture.
+  // Cancelling a gesture must not make fingers that are still down disappear.
+  const pagePointers = new Set<number>();
+  let touchCount = 0;
+  let editingLocked = false;
+  function releaseEditingLockIfClear(): void {
+    if (pagePointers.size === 0 && touchCount === 0) editingLocked = false;
+  }
   document.addEventListener('pointerdown', (event) => {
-    if (pointer && tool !== 'rotate' && event.pointerId !== pointer.pointerId) {
-      const isCanvas = event.target === renderer.domElement;
+    pagePointers.add(event.pointerId);
+    if (tool !== 'rotate' && (editingLocked || pagePointers.size > 1 ||
+      (event.pointerType === 'touch' && !event.isPrimary) || (event.pointerType !== 'touch' && touchCount > 0))) {
+      editingLocked = true;
       cancelActiveGesture();
-      // Do not let the second finger start a new canvas gesture.
-      if (isCanvas) event.stopPropagation();
     }
   }, true);
-  window.addEventListener('blur', cancelActiveGesture);
-  window.addEventListener('pagehide', cancelActiveGesture);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelActiveGesture(); });
+  const releasePagePointer = (event: PointerEvent): void => {
+    pagePointers.delete(event.pointerId);
+    releaseEditingLockIfClear();
+  };
+  document.addEventListener('pointerup', releasePagePointer, true);
+  document.addEventListener('pointercancel', releasePagePointer, true);
+  // A browser can cancel Pointer Events while a physical touch is still down.
+  document.addEventListener('touchstart', (event) => {
+    touchCount = event.touches.length;
+    if (tool !== 'rotate' && touchCount > 1) { editingLocked = true; cancelActiveGesture(); }
+  }, { capture: true, passive: true });
+  const releaseTouch = (event: TouchEvent): void => {
+    touchCount = event.touches.length;
+    releaseEditingLockIfClear();
+  };
+  document.addEventListener('touchend', releaseTouch, { capture: true, passive: true });
+  document.addEventListener('touchcancel', releaseTouch, { capture: true, passive: true });
+  function cancelForPageInterruption(): void {
+    cancelActiveGesture();
+    pagePointers.clear();
+    touchCount = 0;
+    editingLocked = false;
+  }
+  window.addEventListener('blur', cancelForPageInterruption);
+  window.addEventListener('pagehide', cancelForPageInterruption);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelForPageInterruption(); });
   function pinchCenter(): PanPosition | undefined {
     const points = [...activePointers.values()];
     return points.length === 2 ? { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 } : undefined;
@@ -645,6 +675,7 @@ function startApp(): void {
   }
   renderer.domElement.addEventListener('pointerdown', (event) => {
     if (!storageInitialized || !graphicsAvailable()) return;
+    if (tool !== 'rotate' && editingLocked) return;
     activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (activePointers.size > 1 && tool !== 'rotate') {
       pointer = undefined;
@@ -857,6 +888,7 @@ function startApp(): void {
       // A tool switch cancels any unfinished canvas gesture.
       cancelActiveGesture();
       tool = button.dataset.tool as Tool;
+      if (tool !== 'rotate' && (pagePointers.size > 0 || touchCount > 0)) editingLocked = true;
       document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((item) => item.classList.toggle('active', item.dataset.tool === tool));
       toolDrawer?.close();
       redraw();
