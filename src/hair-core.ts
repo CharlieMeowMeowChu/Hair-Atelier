@@ -276,8 +276,11 @@ export function parseEditorHistory(serialized: string): EditorHistory | undefine
     const value: unknown = JSON.parse(serialized);
     if (!value || typeof value !== 'object') return undefined;
     const candidate = value as { version?: number; current?: unknown; undo?: unknown; redo?: unknown };
-    if ((candidate.version !== 1 && candidate.version !== 2 && candidate.version !== 3 && candidate.version !== 4) || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo) ||
-      candidate.undo.length > 20 || candidate.redo.length > 20) return undefined;
+    if ((candidate.version !== 1 && candidate.version !== 2 && candidate.version !== 3 && candidate.version !== 4) || !Array.isArray(candidate.undo) || !Array.isArray(candidate.redo)) return undefined;
+    // Existing files may legitimately contain 20 entries on each side. Undo
+    // and redo only move snapshots, so keep all 40 across either side in v4.
+    if (candidate.undo.length + candidate.redo.length > 40 ||
+      (candidate.version < 4 && (candidate.undo.length > 20 || candidate.redo.length > 20))) return undefined;
     const allStates = [candidate.current, ...candidate.undo, ...candidate.redo];
     if (allStates.some((state) => !state || typeof state !== 'object' || typeof (state as { schemaVersion?: unknown }).schemaVersion !== 'number' || (state as { schemaVersion: number }).schemaVersion > candidate.version!)) return undefined;
     if (allStates.reduce<number>((sum, state) => sum + legacyMigrationCost(state), 0) > legacyMigrationWorkBudget) return undefined;
@@ -374,8 +377,11 @@ export class HairEditor {
 
   public constructor(initial: HairState, history?: Pick<EditorHistory, 'undo' | 'redo'>) {
     this.state = copyState(initial);
-    this.undoStack = (history?.undo ?? []).slice(-20).map(copyState);
-    this.redoStack = (history?.redo ?? []).slice(-20).map(copyState);
+    const undo = history?.undo ?? [];
+    const redo = history?.redo ?? [];
+    if (undo.length + redo.length > 40) throw new Error('History exceeds the supported snapshot limit');
+    this.undoStack = undo.map(copyState);
+    this.redoStack = redo.map(copyState);
   }
 
   public exportState(): HairState { return copyState(this.state); }

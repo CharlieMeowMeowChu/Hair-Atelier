@@ -6,7 +6,7 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：21 test files、123 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：22 test files、130 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
@@ -42,9 +42,10 @@
 | 最小 Guide ribbon | IMPLEMENTED | 每條 Rest arc sample 生成窄、雙面的 3D ribbon；以平行傳輸近似保持寬度，重複 sample 仍產生有限幾何。ribbon 只屬 render 衍生物，中心線仍是唯一可編輯資料；不是最終髮絲／髮片美術。 |
 | 局部幾何更新 | IMPLEMENTED | renderer 同時保留每條 GuideStrand 的不可見 Line 拾取中心線與可見 ribbon；只替換資料 signature 改變的兩種 geometry，並在 overlay 顯示本次 rebuild 髮束數；移除的髮束會釋放 geometry/material；A–D 保留示範色，新增穩定 ID 會有決定性 fallback 色，支援日後擴至 20 條導引束 |
 | PWA 基礎 | IMPLEMENTED | manifest、內建 SVG app icon／favicon、iOS standalone／status-bar metadata；正式建置為整套 shell 產生內容版本與完整性值，安裝完成後才可離線使用；新版等待舊受控分頁關閉後啟用。開發模式仍使用 runtime cache。未做 Safari 離線或加入主畫面真機驗證。 |
-| 本機儲存／讀取 | IMPLEMENTED | 每次有效髮型操作與 Undo／Redo 寫入 IndexedDB `hair-atelier/editor-history/current-v4`；現行存檔包含當前狀態及最多 20 步 Undo／Redo 歷史，讀取會驗證每個 history snapshot；舊 localStorage v2、v1 history 與 v1 single HairState 會兼容讀取，並在下次儲存或編輯時寫入 IndexedDB；舊 key 保留不刪除；未做 Safari 重開真機驗證 |
+| 本機儲存／讀取 | IMPLEMENTED | 每次有效髮型操作與 Undo／Redo 寫入 IndexedDB `hair-atelier/editor-history/current-v4`；一般新編輯保留最多 20 步 Undo；現行格式可保留既有存檔的 Undo／Redo 合計最多 40 筆快照，讀取會驗證每個 history snapshot；舊 localStorage v2、v1 history 與 v1 single HairState 會兼容讀取，並在下次儲存或編輯時寫入 IndexedDB；舊 key 保留不刪除；未做 Safari 重開真機驗證 |
 | 啟動讀檔保護 | PASS | 桌面 Chromium 延遲 IndexedDB 開啟期間，儲存、重設及畫布操作被暫停；讀取完成後原存檔與原髮長保留並恢復操作。此為本機模擬，並非 Safari 真機測試。 |
 | 讀檔失敗後恢復 | PASS | 桌面 Chromium 模擬 IndexedDB 暫時讀取失敗，原存檔保留；恢復後手動讀入有效髮型，修改及儲存，重載仍保留修改。修正前同一測試失敗；損壞存檔及跨分頁衝突保護仍通過。這是本機模擬，並非 Safari 真機測試。 |
+| 滿容量歷史讀寫 | PASS | 原本已接受的 20 筆 Undo＋20 筆 Redo 可完整搬移、序列化與讀回；單元測試逐步遍歷 40 個狀態並還原，亦驗證一般新編輯維持 20 步限制。桌面 Chromium 以 IndexedDB 驗證 Undo、重載及 Redo 後 40 筆快照一致；並非 Safari 真機測試。 |
 | WebGL 中斷與恢復 | PASS | 桌面 Chromium 以 `WEBGL_lose_context` 實際觸發中斷／恢復；驗證未完成手勢取消、其他編輯鎖定、中斷期間可儲存、髮型與歷史保留、重新渲染後操作及 Undo，並測試啟動及手動讀檔時中斷。只改顯示及輸入保護層，沒有改 HairState。Safari 真機未測。 |
 | WebGL 初次啟動失敗 | PASS | 桌面 Chromium 分別模擬建立 WebGL 返回 null 與拋錯，畫面顯示可操作的重新載入按鈕，髮型編輯及儲存保持停用，本機存檔與歷史不被改寫；重新載入後可讀回髮型。此為本機模擬，Safari 真機未測。 |
 
@@ -67,6 +68,7 @@
 - 已修正存檔端點容差不一致：曲線與增長以暫態有效區間處理 schema 接受的 1 nm 內重疊／越界，不因讀取或顯示改寫舊數據；測試涵蓋末段續捲、原本直尾、極短重疊段、可見髮片、存讀及 Undo／Redo。若極端退化數值無法穩定求出續接方向，會拒絕該次增長並保留資料。
 - 已修正容差內重疊紀錄重捲後可能無法讀回，以及未選中捲段被誤改方向的問題；重捲依有效區間判斷，保留其他原始紀錄的順序並在提交前驗證資料。若無法安全保留重疊紀錄，該次操作會顯示原因並保留原髮型；此特殊情況尚未支援成功重捲。
 - 瀏覽器若沒有恢復 WebGL，或渲染因其他原因拋錯，畫面維持提示並暫停編輯，仍可嘗試儲存；首次建立 WebGLRenderer 失敗時可顯示提示並由使用者重新載入，能否成功取決於瀏覽器及裝置；之後其他初始化步驟拋錯未在此回歸範圍內。指定 iPhone／iPad 的中斷恢復未測。
+- 從既有 20＋20 步歷史移動出單側超過 20 筆的 v4 存檔後，舊版程式可能無法讀取並會啟用存檔保護；一般跨分頁寫入衝突已在桌面測試，這個特定情況尚未以新舊程式同時開啟實測。
 - 儲存保護僅在手動讀取並採納有效存檔後解除；若仍讀不到有效存檔，保護維持啟用，暫未提供在無存檔情況下解除保護的流程。
 - 離線提示表示最近一次檢查時程式 shell 完整，不保證瀏覽器稍後不會清理快取，亦不代表存檔寫入已成功；頁面回到前景或網絡狀態改變時會再檢查。指定裝置 Safari 仍未驗證。
 - 首次離線 app shell 及離線背景更新錯誤已在桌面測試修正；這不代表指定 iPhone／iPad Safari 離線驗收已通過。正式版更新為避免混合版本，會等待舊受控分頁全部關閉後啟用；完整性驗證失敗會保留舊版 cache；若已有不完整的同名 cache 而仍有 active／waiting worker，會拒絕安裝以保護現用資料，這種情況暫未自動修復。
