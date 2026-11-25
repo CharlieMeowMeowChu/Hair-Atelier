@@ -21,7 +21,8 @@
     "check:context-browser": "node Tools/webgl-context-smoke.mjs",
     "check:startup-browser": "node Tools/webgl-startup-smoke.mjs",
     "check:offline-readiness": "node Tools/offline-readiness-smoke.mjs",
-    "check:multitouch-browser": "node Tools/multitouch-ownership-smoke.mjs"
+    "check:multitouch-browser": "node Tools/multitouch-ownership-smoke.mjs",
+    "check:offline-registration": "node Tools/offline-registration-smoke.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

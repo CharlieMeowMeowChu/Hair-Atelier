@@ -6,13 +6,14 @@
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：22 test files、130 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：23 test files、138 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
 | Service Worker 行為檢查 | PASS | `Tools/test_service_worker.mjs` 模擬驗證完整快取、資源格式／完整性、失敗時保護舊 cache、同名 cache 驗證、跨 scope 隔離、更新等待，以及離線背景更新不產生未處理錯誤；不取代 Safari 真機驗證。 |
 | 正式建置離線及更新 | PASS | 本機 Chromium 全新 profile 首次在線載入後停止伺服器，離線重開成功顯示畫布、讀回髮型，離線修改、儲存、再重開及 Undo／Redo 通過。另以子路徑測試損壞資源的更新被拒、舊分頁保持舊版、關閉舊分頁後新版本啟用及離線存檔保留；均非 iPhone／iPad 實測。 |
 | 離線準備提示 | PASS | 桌面 Chromium 子路徑正式建置驗證首次下載中、完整快取後顯示備妥、資源校驗失敗與快取被刪除後不顯示備妥；亦驗證損壞更新保留舊版提示、更新等待及新版本啟用。Worker 會重新驗證現用 shell 的資源完整性；不是 Safari 真機驗收。 |
+| 既有離線版本重新註冊失敗 | PASS | 桌面 Chromium 正式建置模擬延遲拒絕和同步錯誤，現用 controller 重新驗證後仍顯示備妥；無回覆或快取被清除時顯示未確認。另停止伺服器、離線重載及核對 IndexedDB 歷史；並非 Safari 真機測試。 |
 | Production build | PASS | `vite build` exit 0；產生 `dist/` |
 | Production bundle 預算 | PASS | `Tools/check_bundle.mjs`：最大 JS bundle ≤600 KB raw／≤150 KB gzip；此為下載量 regression guard，不取代真機 FPS／memory 量測 |
 | 本機 Web server | PASS | Vite 在 127.0.0.1:5173 回應 HTML、manifest、service worker |
@@ -72,6 +73,7 @@
 - 瀏覽器若沒有恢復 WebGL，或渲染因其他原因拋錯，畫面維持提示並暫停編輯，仍可嘗試儲存；首次建立 WebGLRenderer 失敗時可顯示提示並由使用者重新載入，能否成功取決於瀏覽器及裝置；之後其他初始化步驟拋錯未在此回歸範圍內。指定 iPhone／iPad 的中斷恢復未測。
 - 從既有 20＋20 步歷史移動出單側超過 20 筆的 v4 存檔後，舊版程式可能無法讀取並會啟用存檔保護；一般跨分頁寫入衝突已在桌面測試，這個特定情況尚未以新舊程式同時開啟實測。
 - 儲存保護僅在手動讀取並採納有效存檔後解除；若仍讀不到有效存檔，保護維持啟用，暫未提供在無存檔情況下解除保護的流程。
+- 若重新註冊與查詢現有 registration 都失敗，仍會驗證現用 controller，但未能確認是否有等待中的更新；Safari 的實際行為尚待真機驗證。
 - 離線提示表示最近一次檢查時程式 shell 完整，不保證瀏覽器稍後不會清理快取，亦不代表存檔寫入已成功；頁面回到前景或網絡狀態改變時會再檢查。指定裝置 Safari 仍未驗證。
 - 首次離線 app shell 及離線背景更新錯誤已在桌面測試修正；這不代表指定 iPhone／iPad Safari 離線驗收已通過。正式版更新為避免混合版本，會等待舊受控分頁全部關閉後啟用；完整性驗證失敗會保留舊版 cache；若已有不完整的同名 cache 而仍有 active／waiting worker，會拒絕安裝以保護現用資料，這種情況暫未自動修復。
 - 加密取樣增加運算：本機 Node 單束路徑與髮片重建、預熱後各 30 次的中位數，0.4 m 為約 0.46→1.02 ms，2 m 為約 0.95→2.27 ms；分別由 63→123、203→403 個點。這不是瀏覽器或真機 FPS 測量，裝置效能仍待驗證。
@@ -94,6 +96,7 @@ npm run dev -- --host 127.0.0.1
 ```bash
 npm run check:offline-browser
 npm run check:offline-readiness
+npm run check:offline-registration
 npm run check:offline-upgrade
 npm run check:context-browser
 npm run check:multitouch-browser

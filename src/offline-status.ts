@@ -70,19 +70,35 @@ export function monitorOfflineStatus(element: HTMLElement): void {
     worker.addEventListener('statechange', () => { void refresh(); });
   }
 
+  function attachRegistration(result: ServiceWorkerRegistration): void {
+    if (registration !== result) {
+      registration = result;
+      registration.addEventListener('updatefound', () => { observe(registration?.installing ?? null); void refresh(); });
+    }
+    observe(registration.installing);
+    observe(registration.waiting);
+    void refresh();
+  }
+
+  function registrationFailed(): void {
+    // A failed update check does not invalidate an existing controller's cache.
+    // Verify it independently, and recover the waiting-worker status if available.
+    void refresh();
+    try {
+      void workers.getRegistration().then((result) => {
+        if (result) attachRegistration(result);
+      }).catch(() => undefined);
+    } catch { /* The current controller can still be checked without a registration. */ }
+  }
+
   workers.addEventListener('controllerchange', () => { void refresh(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });
   window.addEventListener('online', () => { void refresh(); });
   window.addEventListener('offline', () => { void refresh(); });
   window.addEventListener('pageshow', () => { void refresh(); });
   paint();
+  if (workers.controller) void refresh();
   try {
-    void workers.register('./sw.js').then((result) => {
-      registration = result;
-      registration.addEventListener('updatefound', () => { observe(registration?.installing ?? null); void refresh(); });
-      observe(registration.installing);
-      observe(registration.waiting);
-      void refresh();
-    }).catch(() => { queryGeneration += 1; readiness = 'unavailable'; paint(); });
-  } catch { readiness = 'unavailable'; paint(); }
+    void workers.register('./sw.js').then(attachRegistration).catch(registrationFailed);
+  } catch { registrationFailed(); }
 }
