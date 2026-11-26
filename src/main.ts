@@ -11,7 +11,10 @@ import { projectPointToArcSegment } from './line-arc';
 import { RecentMeasurements } from './performance-metrics';
 import { buildVisibleRibbon } from './visible-ribbon';
 import { fullHairSamples, visibleHairSamples } from './visible-hair';
-import { readEditorHistory, StorageConflictError, writeEditorHistory, type StorageToken } from './indexeddb-storage';
+import {
+  legacyLocalStorageKeys, legacySnapshotMatches, makeLegacyGuard, readEditorHistory, snapshotLegacyLocalStorage,
+  StorageConflictError, writeEditorHistory, type LegacyLocalGuard, type StorageToken,
+} from './indexeddb-storage';
 import { SaveQueue } from './save-queue';
 import { freeCurlInterval } from './curl-target';
 import { growthMessage } from './growth-message';
@@ -58,9 +61,6 @@ function startApp(): void {
     render: document.querySelector<HTMLElement>('#metric-render'),
   };
 
-  const storageKey = 'hair-atelier.editor-history.v2';
-  const legacyHistoryStorageKey = 'hair-atelier.editor-history.v1';
-  const legacyStorageKey = 'hair-atelier.hair-state.v1';
   let storageProtected = false;
   let storageToken: StorageToken = { current: undefined, legacy: undefined };
   let storageConflict = false;
@@ -68,24 +68,50 @@ function startApp(): void {
   let finishInitialStorageRead!: () => void;
   const initialStorageRead = new Promise<void>((resolve) => { finishInitialStorageRead = resolve; });
   const saveQueue = new SaveQueue();
+  function protectLegacyConflict(): void {
+    storageProtected = true;
+    storageConflict = true;
+    showStorageWarning('無法確認舊版存檔與目前存檔是否一致，已暫停儲存以保護資料。');
+  }
+  function legacyGuardIsCurrent(guard: LegacyLocalGuard | undefined): boolean {
+    if (!guard || legacySnapshotMatches(guard)) return true;
+    protectLegacyConflict();
+    return false;
+  }
+  function checkActiveLegacyGuard(): void { legacyGuardIsCurrent(storageToken.localGuard); }
+  window.addEventListener('storage', (event) => {
+    if (event.key === null || legacyLocalStorageKeys.some((key) => key === event.key)) checkActiveLegacyGuard();
+  });
+  window.addEventListener('pageshow', checkActiveLegacyGuard);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkActiveLegacyGuard(); });
   function persistEditorHistory(candidate: HairEditor): Promise<boolean> {
     if (!storageInitialized) return Promise.resolve(false);
     hasUnsavedChanges = true;
     const result = saveQueue.save(JSON.stringify(candidate.exportHistory()), async (snapshot) => {
       await initialStorageRead;
       if (storageProtected) throw new Error('Existing storage is protected');
+      if (!legacyGuardIsCurrent(storageToken.localGuard)) throw new StorageConflictError('Legacy storage changed');
       try {
-        await writeEditorHistory(snapshot, storageToken);
-        storageToken = { current: snapshot, legacy: undefined };
+        const prior = storageToken;
+        await writeEditorHistory(snapshot, prior);
+        const localGuard = prior.localGuard ? { ...prior.localGuard, persisted: true } : undefined;
+        storageToken = { current: snapshot, legacy: undefined, localGuard };
+        // The old page can still write localStorage while IndexedDB commits.
+        // The persisted fingerprint also protects subsequent reloads.
+        if (!legacyGuardIsCurrent(localGuard)) throw new StorageConflictError('Legacy storage changed during save');
       } catch (error) {
-        if (error instanceof StorageConflictError) storageConflict = true;
+        if (error instanceof StorageConflictError) {
+          storageConflict = true;
+          legacyGuardIsCurrent(storageToken.localGuard);
+        }
         throw error;
       }
     });
     const revision = saveQueue.revision;
     return result.then((saved) => {
       if (revision === saveQueue.revision) hasUnsavedChanges = !saved;
-      if (!saved) showStorageWarning(storageConflict ? '另一個分頁已更新存檔；目前操作未儲存，讀取存檔會取代目前操作。' : '儲存失敗，現有操作可能未保存。');
+      if (!saved && storageProtected && storageConflict) showStorageWarning('無法確認舊版存檔與目前存檔是否一致，已暫停儲存以保護資料。');
+      else if (!saved) showStorageWarning(storageConflict ? '另一個分頁已更新存檔；目前操作未儲存，讀取存檔會取代目前操作。' : '儲存失敗，現有操作可能未保存。');
       else if (storageWarning && !storageProtected) storageWarning.hidden = true;
       return saved;
     });
@@ -108,10 +134,31 @@ function startApp(): void {
           showStorageWarning('此樣板暫不能安全顯示存檔；已暫停儲存以保護資料。');
           return undefined;
         }
-        return { editor: new HairEditor(indexedHistory.current, indexedHistory), token: read.token };
+        let token = read.token;
+        if (read.localDigest !== undefined) {
+          const format = typeof read.localDigest === 'string' && read.localDigest.startsWith('raw:') ? 'raw'
+            : typeof read.localDigest === 'string' && /^sha256-[0-9a-f]{64}$/.test(read.localDigest) ? 'sha256' : undefined;
+          if (!format) {
+            protectLegacyConflict();
+            return undefined;
+          }
+          const localGuard = await makeLegacyGuard(snapshotLegacyLocalStorage(), true, format);
+          if (localGuard.digest !== read.localDigest || !legacyGuardIsCurrent(localGuard)) {
+            protectLegacyConflict();
+            return undefined;
+          }
+          token = { ...token, localGuard };
+        } else {
+          // Observe future changes even for existing v4 saves without a marker;
+          // their earlier localStorage history cannot be reconstructed here.
+          token = { ...token, localGuard: await makeLegacyGuard(snapshotLegacyLocalStorage(), false) };
+        }
+        return { editor: new HairEditor(indexedHistory.current, indexedHistory), token };
       }
-      for (const key of [storageKey, legacyHistoryStorageKey]) {
-        const raw = localStorage.getItem(key);
+      const localGuard = await makeLegacyGuard(snapshotLegacyLocalStorage(), false);
+      const token: StorageToken = { ...read.token, localGuard };
+      for (let index = 0; index < 2; index += 1) {
+        const raw = localGuard.snapshot[index];
         if (raw === null) continue;
         const history = parseEditorHistory(raw);
         if (!history) {
@@ -125,10 +172,10 @@ function startApp(): void {
           return undefined;
         }
         const restored = new HairEditor(history.current, history);
-        return { editor: restored, token: read.token };
+        return { editor: restored, token };
       }
-      const rawLegacyState = localStorage.getItem(legacyStorageKey);
-      if (rawLegacyState === null) return { token: read.token };
+      const rawLegacyState = localGuard.snapshot[2];
+      if (rawLegacyState === null) return { token };
       const legacyState = parseHairState(rawLegacyState);
       if (!legacyState) {
         storageProtected = true;
@@ -141,7 +188,7 @@ function startApp(): void {
         showStorageWarning('此樣板暫不能安全顯示舊存檔；已暫停儲存以保護資料。');
         return undefined;
       }
-      return { editor: restored, token: read.token };
+      return { editor: restored, token };
     } catch {
       storageProtected = true;
       appStatus.textContent = '本機儲存暫時無法讀取，已暫停儲存以保護資料';
@@ -933,6 +980,7 @@ function startApp(): void {
         if (graphicsGeneration !== loadGraphicsGeneration || !graphicsAvailable()) { appStatus.textContent = '畫面中斷，已取消讀取並保留目前髮型'; return; }
         if (saveQueue.revision !== revision) { appStatus.textContent = '讀取期間髮型已改變，保留目前操作'; return; }
         if (!restored?.editor) { if (!storageProtected) appStatus.textContent = '沒有可讀取的有效儲存資料'; return; }
+        if (!legacyGuardIsCurrent(restored.token.localGuard)) return;
         storageToken = restored.token;
         storageConflict = false;
         hasUnsavedChanges = false;
@@ -979,6 +1027,7 @@ function startApp(): void {
   const initialRevision = saveQueue.revision;
   void loadPersistedEditor().then((restored) => {
     if (!restored) return;
+    if (!legacyGuardIsCurrent(restored.token.localGuard)) return;
     storageToken = restored.token;
     if (!restored.editor || saveQueue.revision !== initialRevision) return;
     editor = restored.editor;

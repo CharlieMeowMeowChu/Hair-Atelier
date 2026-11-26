@@ -1,12 +1,12 @@
 # Web Core Spike 驗證紀錄
 
-最新驗證：2026-11-26（香港）。分支：`phase0/environment-readiness`。
+最新驗證：2026-11-27（香港）。分支：`phase0/environment-readiness`。
 
 ## 已通過
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| Core／手勢／效能單元測試 | PASS | Vitest：23 test files、138 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
+| Core／手勢／效能單元測試 | PASS | Vitest：24 test files、144 tests passed；包括局部 Cut、可調留髮長度電剪、Curl→Cut ≤0.5 mm、Grow 保捲、Undo/Redo、PickProxy 及 ConstraintGraph。新增 W04 Rest arc tests：不同 base／梳髮／分界／側撥下數值 Rest length 對 stored length 誤差 ≤0.05 mm、unit-speed helix、curl 邊界位置／切線連續、Curl→Cut 保留採樣點、局部 curl＋自由尾 Cut→Grow 完整恢復、v1 current／undo／redo 全部遷移至 v2，以及壞 v2 座標拒絕；另有 rendered-line segment→Rest arc `s` 插值、端點 clamp、退化段與最小 ribbon 幾何測試。 |
 | Dependency audit | PASS | 2026-10-30：`npm audit --json`（production 與 development dependencies）回報 0 vulnerabilities；唯一 runtime dependency 為 `three@0.180.0`，套件宣告 MIT license。Vitest 已升至 5.0.5 以移除舊測試鏈的漏洞。 |
 | TypeScript typecheck | PASS | `tsc -b` exit 0 |
 | PWA shell 檢查 | PASS | `node Tools/check_pwa.mjs` 驗證 manifest、icon、HTML 引用及 Service Worker 檔案 |
@@ -47,6 +47,7 @@
 | 本機儲存／讀取 | IMPLEMENTED | 每次有效髮型操作與 Undo／Redo 寫入 IndexedDB `hair-atelier/editor-history/current-v4`；一般新編輯保留最多 20 步 Undo；現行格式可保留既有存檔的 Undo／Redo 合計最多 40 筆快照，讀取會驗證每個 history snapshot；舊 localStorage v2、v1 history 與 v1 single HairState 會兼容讀取，並在下次儲存或編輯時寫入 IndexedDB；舊 key 保留不刪除；未做 Safari 重開真機驗證 |
 | 啟動讀檔保護 | PASS | 桌面 Chromium 延遲 IndexedDB 開啟期間，儲存、重設及畫布操作被暫停；讀取完成後原存檔與原髮長保留並恢復操作。此為本機模擬，並非 Safari 真機測試。 |
 | 讀檔失敗後恢復 | PASS | 桌面 Chromium 模擬 IndexedDB 暫時讀取失敗，原存檔保留；恢復後手動讀入有效髮型，修改及儲存，重載仍保留修改。修正前同一測試失敗；損壞存檔及跨分頁衝突保護仍通過。這是本機模擬，並非 Safari 真機測試。 |
+| 舊版 localStorage 與新版存檔衝突 | PASS | 隔離 Chromium 驗證舊頁於遷移前、提交期間、遷移後及新版關閉期間修改舊鍵時，可偵測並保護資料；重載／手動讀取不會靜默解除衝突保護。亦測試較高優先鍵新增、來源標記損壞及值為 undefined、缺少 crypto.subtle 時的精確本機備援；並非 Safari 或實際區網 HTTP 真機測試。 |
 | 滿容量歷史讀寫 | PASS | 原本已接受的 20 筆 Undo＋20 筆 Redo 可完整搬移、序列化與讀回；單元測試逐步遍歷 40 個狀態並還原，亦驗證一般新編輯維持 20 步限制。桌面 Chromium 以 IndexedDB 驗證 Undo、重載及 Redo 後 40 筆快照一致；並非 Safari 真機測試。 |
 | WebGL 中斷與恢復 | PASS | 桌面 Chromium 以 `WEBGL_lose_context` 實際觸發中斷／恢復；驗證未完成手勢取消、其他編輯鎖定、中斷期間可儲存、髮型與歷史保留、重新渲染後操作及 Undo，並測試啟動及手動讀檔時中斷。只改顯示及輸入保護層，沒有改 HairState。Safari 真機未測。 |
 | WebGL 初次啟動失敗 | PASS | 桌面 Chromium 分別模擬建立 WebGL 返回 null 與拋錯，畫面顯示可操作的重新載入按鈕，髮型編輯及儲存保持停用，本機存檔與歷史不被改寫；重新載入後可讀回髮型。此為本機模擬，Safari 真機未測。 |
@@ -72,6 +73,7 @@
 - 已修正容差內重疊紀錄重捲後可能無法讀回，以及未選中捲段被誤改方向的問題；重捲依有效區間判斷，保留其他原始紀錄的順序並在提交前驗證資料。若無法安全保留重疊紀錄，該次操作會顯示原因並保留原髮型；此特殊情況尚未支援成功重捲。
 - 瀏覽器若沒有恢復 WebGL，或渲染因其他原因拋錯，畫面維持提示並暫停編輯，仍可嘗試儲存；首次建立 WebGLRenderer 失敗時可顯示提示並由使用者重新載入，能否成功取決於瀏覽器及裝置；之後其他初始化步驟拋錯未在此回歸範圍內。指定 iPhone／iPad 的中斷恢復未測。
 - 從既有 20＋20 步歷史移動出單側超過 20 筆的 v4 存檔後，舊版程式可能無法讀取並會啟用存檔保護；一般跨分頁寫入衝突已在桌面測試，這個特定情況尚未以新舊程式同時開啟實測。
+- localStorage 與 IndexedDB 不支援共同原子交易；來源標記與新版存檔在 IndexedDB 內原子保存，並於提交後、跨頁事件、回前景及重載時核對舊鍵。既有 v4 沒來源標記，或標記被單獨刪除時，建立基準前的新舊次序無法推斷；已偵測衝突目前只保留兩份並暫停儲存，尚無介面選擇或合併版本。缺少加密 API 時使用精確原文備援，佔用本機額外空間；空間不足會拒絕寫入。
 - 儲存保護僅在手動讀取並採納有效存檔後解除；若仍讀不到有效存檔，保護維持啟用，暫未提供在無存檔情況下解除保護的流程。
 - 若重新註冊與查詢現有 registration 都失敗，仍會驗證現用 controller，但未能確認是否有等待中的更新；Safari 的實際行為尚待真機驗證。
 - 離線提示表示最近一次檢查時程式 shell 完整，不保證瀏覽器稍後不會清理快取，亦不代表存檔寫入已成功；頁面回到前景或網絡狀態改變時會再檢查。指定裝置 Safari 仍未驗證。
@@ -97,6 +99,8 @@ npm run dev -- --host 127.0.0.1
 npm run check:offline-browser
 npm run check:offline-readiness
 npm run check:offline-registration
+npm run check:legacy-race
+npm run check:legacy-insecure
 npm run check:offline-upgrade
 npm run check:context-browser
 npm run check:multitouch-browser

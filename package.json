@@ -22,7 +22,9 @@
     "check:startup-browser": "node Tools/webgl-startup-smoke.mjs",
     "check:offline-readiness": "node Tools/offline-readiness-smoke.mjs",
     "check:multitouch-browser": "node Tools/multitouch-ownership-smoke.mjs",
-    "check:offline-registration": "node Tools/offline-registration-smoke.mjs"
+    "check:offline-registration": "node Tools/offline-registration-smoke.mjs",
+    "check:legacy-race": "node Tools/legacy-localstorage-race-smoke.mjs",
+    "check:legacy-insecure": "node Tools/legacy-insecure-smoke.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

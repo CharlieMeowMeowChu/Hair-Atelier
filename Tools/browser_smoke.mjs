@@ -316,6 +316,8 @@ try {
     open.onerror = () => reject(open.error);
     open.onsuccess = () => {
       const db = open.result, tx = db.transaction('editor-history', 'readwrite'), store = tx.objectStore('editor-history');
+      // These isolated scenarios seed an older format with no provenance.
+      store.delete('localstorage-source-v1');
       ${v4 === undefined ? "store.delete('current-v4');" : `store.put(${JSON.stringify(v4)}, 'current-v4');`}
       ${v3 === undefined ? "store.delete('current-v3');" : `store.put(${JSON.stringify(v3)}, 'current-v3');`}
       ${v2 === undefined ? "store.delete('current-v2');" : `store.put(${JSON.stringify(v2)}, 'current-v2');`}
@@ -632,8 +634,18 @@ try {
   await secondClient.connect();
   await secondClient.command('Runtime.enable');
   const storageModule = `import('/src/indexeddb-storage.ts')`;
+  // Capture the localStorage source as the application does; otherwise a
+  // rejection could merely mean "missing guard" rather than a real IDB race.
+  const guardedRead = (target) => evaluate(target, `${storageModule}.then(async module => {
+    const read = await module.readEditorHistory();
+    const persisted = read.localDigest !== undefined;
+    const format = !persisted ? undefined : typeof read.localDigest === 'string' && read.localDigest.startsWith('raw:') ? 'raw' : 'sha256';
+    const localGuard = await module.makeLegacyGuard(module.snapshotLegacyLocalStorage(), persisted, format);
+    if (persisted && localGuard.digest !== read.localDigest) throw new Error('Invalid test source marker');
+    return { ...read, token: { ...read.token, localGuard } };
+  })`);
   await storageWrite(undefined, legacySerialized, v3Serialized);
-  const v3Read = await evaluate(client, `${storageModule}.then(module => module.readEditorHistory())`);
+  const v3Read = await guardedRead(client);
   await storageWrite(undefined, legacySerialized, v3Serialized + ' ');
   parsed.v3RaceRejected = await evaluate(secondClient, `${storageModule}.then(async module => {
     try { await module.writeEditorHistory(${JSON.stringify(indexedHistory)}, ${JSON.stringify(v3Read.token)}); return false; }
@@ -642,7 +654,7 @@ try {
   const afterV3Race = await evaluate(client, `${storageModule}.then(module => module.readEditorHistory())`);
   parsed.v3RaceRejected = parsed.v3RaceRejected && afterV3Race.token.current === undefined && afterV3Race.value === v3Serialized + ' ';
   await storageWrite(undefined, legacySerialized);
-  const legacyRead = await evaluate(client, `${storageModule}.then(module => module.readEditorHistory())`);
+  const legacyRead = await guardedRead(client);
   await storageWrite(undefined, legacySerialized + ' ');
   parsed.legacyRaceRejected = await evaluate(secondClient, `${storageModule}.then(async module => {
     try { await module.writeEditorHistory(${JSON.stringify(indexedHistory)}, ${JSON.stringify(legacyRead.token)}); return false; }
@@ -651,8 +663,15 @@ try {
   const afterLegacyRace = await evaluate(client, `${storageModule}.then(module => module.readEditorHistory())`);
   parsed.legacyRaceRejected = parsed.legacyRaceRejected && afterLegacyRace.token.current === undefined && afterLegacyRace.value === legacySerialized + ' ';
   await storageWrite(indexedHistory, legacySerialized);
-  const firstRead = await evaluate(client, `${storageModule}.then(module => module.readEditorHistory())`);
-  const secondRead = await evaluate(secondClient, `${storageModule}.then(module => module.readEditorHistory())`);
+  const bareRead = await evaluate(client, `${storageModule}.then(module => module.readEditorHistory())`);
+  parsed.missingGuardRejected = await evaluate(secondClient, `${storageModule}.then(async module => {
+    try { await module.writeEditorHistory(${JSON.stringify(indexedHistory + ' unguarded')}, ${JSON.stringify(bareRead.token)}); return false; }
+    catch (error) { return error instanceof module.StorageConflictError; }
+  })`);
+  const afterMissingGuard = await evaluate(client, `${storageModule}.then(module => module.readEditorHistory())`);
+  parsed.missingGuardRejected = parsed.missingGuardRejected && afterMissingGuard.value === indexedHistory && afterMissingGuard.localDigest === undefined;
+  const firstRead = await guardedRead(client);
+  const secondRead = await guardedRead(secondClient);
   await evaluate(client, `${storageModule}.then(module => module.writeEditorHistory(${JSON.stringify(indexedHistory + ' ')}, ${JSON.stringify(firstRead.token)}))`);
   parsed.secondTabWriteRejected = await evaluate(secondClient, `${storageModule}.then(async module => {
     try { await module.writeEditorHistory(${JSON.stringify(indexedHistory)}, ${JSON.stringify(secondRead.token)}); return false; }
@@ -788,10 +807,10 @@ try {
     await client.command('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   }
   parsed.consoleErrors = consoleErrors.filter((message) => !message.startsWith('[vite] failed to connect to websocket.'));
-  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.startupReady || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.twoFingerPanValid || !parsed.longTailPanCutValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.curlSpanControlValid || !parsed.middleRecurlFlowValid || !parsed.collisionFailureGuardValid || !parsed.startupLoadGuardValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.historyCapacityValid || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.v3IndexedDbLoaded || !parsed.v3UpgradeSaved || !parsed.corruptV3Protected || !parsed.v3RaceRejected || !parsed.corruptStorageProtected || !parsed.storageRecoveryValid || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
+  if (parsed.canvasCount !== 1 || parsed.overlayLabel !== 'Rest arc s' || parsed.status === '載入 3D 髮束中' || !parsed.startupReady || !parsed.touchTargetsValid || parsed.stageTouchAction !== 'none' || !parsed.rotateVisualChanged || !parsed.pinchVisualChanged || !parsed.pinchResumeValid || !parsed.zeroDistancePinchValid || !parsed.twoFingerPanValid || !parsed.longTailPanCutValid || !parsed.toolSwitchCancelsGesture || !parsed.tapCancellationValid || !parsed.cutReleaseSweepValid || !parsed.phoneLayoutValid || !parsed.curlSpanControlValid || !parsed.middleRecurlFlowValid || !parsed.collisionFailureGuardValid || !parsed.startupLoadGuardValid || !parsed.tabletLayoutValid || !parsed.indexedDbHistoryValid || !parsed.indexedDbReloaded || !parsed.historyCapacityValid || !parsed.legacyIndexedDbLoaded || !parsed.legacyUpgradeSaved || !parsed.v3IndexedDbLoaded || !parsed.v3UpgradeSaved || !parsed.corruptV3Protected || !parsed.v3RaceRejected || !parsed.corruptStorageProtected || !parsed.storageRecoveryValid || !parsed.oversizedStorageProtected || !parsed.storageWarningVisible || !parsed.secondTabWriteRejected || !parsed.missingGuardRejected || !parsed.legacyRaceRejected || !parsed.unsavedLoadGuardValid || !parsed.serviceWorkerControlled || !parsed.offlineCanvasLoaded || parsed.errors.length > 0 || parsed.consoleErrors.length > 0) {
     throw new Error(`Browser smoke failed: ${JSON.stringify(parsed)}`);
   }
-  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, twoFingerPanValid=${parsed.twoFingerPanValid}, longTailPanCutValid=${parsed.longTailPanCutValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, curlSpanControlValid=${parsed.curlSpanControlValid}, middleRecurlFlowValid=${parsed.middleRecurlFlowValid}, collisionFailureGuardValid=${parsed.collisionFailureGuardValid}, startupLoadGuardValid=${parsed.startupLoadGuardValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, historyCapacityValid=${parsed.historyCapacityValid}, v3IndexedDbLoaded=${parsed.v3IndexedDbLoaded}, v3UpgradeSaved=${parsed.v3UpgradeSaved}, corruptV3Protected=${parsed.corruptV3Protected}, v3RaceRejected=${parsed.v3RaceRejected}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, storageRecoveryValid=${parsed.storageRecoveryValid}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
+  console.log(`Browser smoke passed: canvas=${parsed.canvasCount}, overlay=${parsed.overlayLabel}, touchTargetsValid=${parsed.touchTargetsValid}, stageTouchAction=${parsed.stageTouchAction}, rotateVisualChanged=${parsed.rotateVisualChanged}, pinchVisualChanged=${parsed.pinchVisualChanged}, pinchResumeValid=${parsed.pinchResumeValid}, zeroDistancePinchValid=${parsed.zeroDistancePinchValid}, twoFingerPanValid=${parsed.twoFingerPanValid}, longTailPanCutValid=${parsed.longTailPanCutValid}, toolSwitchCancelsGesture=${parsed.toolSwitchCancelsGesture}, tapCancellationValid=${parsed.tapCancellationValid}, cutReleaseSweepValid=${parsed.cutReleaseSweepValid}, phoneLayoutValid=${parsed.phoneLayoutValid}, curlSpanControlValid=${parsed.curlSpanControlValid}, middleRecurlFlowValid=${parsed.middleRecurlFlowValid}, collisionFailureGuardValid=${parsed.collisionFailureGuardValid}, startupLoadGuardValid=${parsed.startupLoadGuardValid}, tabletLayoutValid=${parsed.tabletLayoutValid}, indexedDbHistoryValid=${parsed.indexedDbHistoryValid}, indexedDbReloaded=${parsed.indexedDbReloaded}, historyCapacityValid=${parsed.historyCapacityValid}, v3IndexedDbLoaded=${parsed.v3IndexedDbLoaded}, v3UpgradeSaved=${parsed.v3UpgradeSaved}, corruptV3Protected=${parsed.corruptV3Protected}, v3RaceRejected=${parsed.v3RaceRejected}, legacyIndexedDbLoaded=${parsed.legacyIndexedDbLoaded}, legacyUpgradeSaved=${parsed.legacyUpgradeSaved}, corruptStorageProtected=${parsed.corruptStorageProtected}, storageRecoveryValid=${parsed.storageRecoveryValid}, oversizedStorageProtected=${parsed.oversizedStorageProtected}, storageWarningVisible=${parsed.storageWarningVisible}, secondTabWriteRejected=${parsed.secondTabWriteRejected}, missingGuardRejected=${parsed.missingGuardRejected}, legacyRaceRejected=${parsed.legacyRaceRejected}, unsavedLoadGuardValid=${parsed.unsavedLoadGuardValid}, serviceWorkerControlled=${parsed.serviceWorkerControlled}, offlineCanvasLoaded=${parsed.offlineCanvasLoaded}, status=${parsed.status}`);
 } finally {
   secondClient?.close();
   client?.close();
