@@ -1,0 +1,13 @@
+ERROR Draco mesh compression is not available because library could not be found at /usr/bin/4.3/python/lib/python3.13/site-packages/libextern_draco.so
+10:03:09 | INFO: Starting glTF 2.0 export
+10:03:09 | INFO: Extracting primitive: Cube
+10:03:09 | INFO: Primitives created: 1
+10:03:09 | INFO: Finished glTF 2.0 export in 0.005972623825073242 s
+
+10:03:09 | INFO: Data are loaded, start creating Blender stuff
+10:03:09 | INFO: Blender create Mesh node Cube
+10:03:09 | INFO: glTF import finished in 0.00s
+HAIR_ENVIRONMENT_SMOKE {"status": "PASS", "blender": "4.3.2", "checks": ["headless_start", "mesh_create", "glb_export", "glb_import", "meter_scale"], "expected_dimensions_m": [0.20000000298023224, 0.20000000298023224, 0.20000000298023224], "actual_dimensions_m": [0.20000000298023224, 0.20000000298023224, 0.20000000298023224], "max_error_m": 0.0, "fixture_bytes": 1856, "scope": "Environment smoke only; not F01 or any HAIR test"}
+Blender 4.3.2
+
+Blender quit

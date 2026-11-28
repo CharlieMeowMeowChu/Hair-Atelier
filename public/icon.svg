@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Hair Atelier">
+  <rect width="256" height="256" rx="56" fill="#211c29"/>
+  <path d="M69 84c21-30 97-34 122 12 12 22 7 61-6 91-5 12-18 19-31 16-10-2-17-10-17-20 0-14 9-26 10-43 1-17-9-30-26-30-25 0-37 20-37 46 0 26-20 44-43 39-19-4-30-25-23-43 5-13 12-25 21-38Z" fill="#f6a9be"/>
+  <path d="m73 165 102-101M84 189l-17-17M109 214l-17-17M158 81l17 17M184 107l17 17" stroke="#fff4f7" stroke-width="12" stroke-linecap="round"/>
+</svg>
