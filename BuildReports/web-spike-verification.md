@@ -1,6 +1,6 @@
 # Web Core Spike 驗證紀錄
 
-最新驗證：2026-11-27（香港）。分支：`phase0/environment-readiness`。
+最新驗證：2026-11-28（香港）。分支：`phase0/environment-readiness`。
 
 ## 已通過
 
@@ -48,6 +48,7 @@
 | 啟動讀檔保護 | PASS | 桌面 Chromium 延遲 IndexedDB 開啟期間，儲存、重設及畫布操作被暫停；讀取完成後原存檔與原髮長保留並恢復操作。此為本機模擬，並非 Safari 真機測試。 |
 | 讀檔失敗後恢復 | PASS | 桌面 Chromium 模擬 IndexedDB 暫時讀取失敗，原存檔保留；恢復後手動讀入有效髮型，修改及儲存，重載仍保留修改。修正前同一測試失敗；損壞存檔及跨分頁衝突保護仍通過。這是本機模擬，並非 Safari 真機測試。 |
 | 舊版 localStorage 與新版存檔衝突 | PASS | 隔離 Chromium 驗證舊頁於遷移前、提交期間、遷移後及新版關閉期間修改舊鍵時，可偵測並保護資料；重載／手動讀取不會靜默解除衝突保護。亦測試較高優先鍵新增、來源標記損壞及值為 undefined、缺少 crypto.subtle 時的精確本機備援；並非 Safari 或實際區網 HTTP 真機測試。 |
+| 衝突存檔備份下載 | PASS | 桌面 Chromium 在隔離 profile 中實際下載 JSON，核對新版／舊版原文、來源標記及本頁未儲存歷史；取消、讀取期間舊鍵變更、不支援資料類型和關閉重開的競態均不會改寫原資料。430×932 下入口及 modal 觸控尺寸通過；不代表 Safari 真機下載已驗證。 |
 | 滿容量歷史讀寫 | PASS | 原本已接受的 20 筆 Undo＋20 筆 Redo 可完整搬移、序列化與讀回；單元測試逐步遍歷 40 個狀態並還原，亦驗證一般新編輯維持 20 步限制。桌面 Chromium 以 IndexedDB 驗證 Undo、重載及 Redo 後 40 筆快照一致；並非 Safari 真機測試。 |
 | WebGL 中斷與恢復 | PASS | 桌面 Chromium 以 `WEBGL_lose_context` 實際觸發中斷／恢復；驗證未完成手勢取消、其他編輯鎖定、中斷期間可儲存、髮型與歷史保留、重新渲染後操作及 Undo，並測試啟動及手動讀檔時中斷。只改顯示及輸入保護層，沒有改 HairState。Safari 真機未測。 |
 | WebGL 初次啟動失敗 | PASS | 桌面 Chromium 分別模擬建立 WebGL 返回 null 與拋錯，畫面顯示可操作的重新載入按鈕，髮型編輯及儲存保持停用，本機存檔與歷史不被改寫；重新載入後可讀回髮型。此為本機模擬，Safari 真機未測。 |
@@ -73,6 +74,7 @@
 - 已修正容差內重疊紀錄重捲後可能無法讀回，以及未選中捲段被誤改方向的問題；重捲依有效區間判斷，保留其他原始紀錄的順序並在提交前驗證資料。若無法安全保留重疊紀錄，該次操作會顯示原因並保留原髮型；此特殊情況尚未支援成功重捲。
 - 瀏覽器若沒有恢復 WebGL，或渲染因其他原因拋錯，畫面維持提示並暫停編輯，仍可嘗試儲存；首次建立 WebGLRenderer 失敗時可顯示提示並由使用者重新載入，能否成功取決於瀏覽器及裝置；之後其他初始化步驟拋錯未在此回歸範圍內。指定 iPhone／iPad 的中斷恢復未測。
 - 從既有 20＋20 步歷史移動出單側超過 20 筆的 v4 存檔後，舊版程式可能無法讀取並會啟用存檔保護；一般跨分頁寫入衝突已在桌面測試，這個特定情況尚未以新舊程式同時開啟實測。
+- 衝突備份是準備當刻的本機 JSON 快照，不等於自動解決衝突；目前尚未提供備份匯入、選擇或合併版本。若 IDB 有無法無損編碼的資料類型會拒絕匯出並保留原資料；首次無法建立 3D 畫面時尚未有備份入口。iPhone／iPad Safari 下載未測。
 - localStorage 與 IndexedDB 不支援共同原子交易；來源標記與新版存檔在 IndexedDB 內原子保存，並於提交後、跨頁事件、回前景及重載時核對舊鍵。既有 v4 沒來源標記，或標記被單獨刪除時，建立基準前的新舊次序無法推斷；已偵測衝突目前只保留兩份並暫停儲存，尚無介面選擇或合併版本。缺少加密 API 時使用精確原文備援，佔用本機額外空間；空間不足會拒絕寫入。
 - 儲存保護僅在手動讀取並採納有效存檔後解除；若仍讀不到有效存檔，保護維持啟用，暫未提供在無存檔情況下解除保護的流程。
 - 若重新註冊與查詢現有 registration 都失敗，仍會驗證現用 controller，但未能確認是否有等待中的更新；Safari 的實際行為尚待真機驗證。
@@ -101,6 +103,8 @@ npm run check:offline-readiness
 npm run check:offline-registration
 npm run check:legacy-race
 npm run check:legacy-insecure
+npm run check:conflict-backup
+npm run check:conflict-backup-storage
 npm run check:offline-upgrade
 npm run check:context-browser
 npm run check:multitouch-browser

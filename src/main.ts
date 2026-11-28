@@ -23,6 +23,7 @@ import { clipSweepToBounds, sweepStepPixels } from './sweep-sampling';
 import { panCamera, type PanPosition } from './camera-pan';
 import { canRenderHistory } from './runtime-budget';
 import { monitorOfflineStatus } from './offline-status';
+import { readConflictBackup } from './conflict-backup';
 
 function startApp(): void {
   const stage = document.querySelector<HTMLElement>('#stage');
@@ -32,18 +33,23 @@ function startApp(): void {
   // Do not let a new interaction replace a saved hairstyle before the initial
   // asynchronous IndexedDB read has completed.
   let storageInitialized = false;
+  let backupPreparing = false;
   let graphicsState: 'ready' | 'lost' | 'restoring' = 'ready';
   let graphicsGeneration = 0;
   const initialControls = [...document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button, input, select')]
     .map((control) => ({ control, disabled: control.disabled }));
   function syncControls(): void {
+    const backupAvailable = Boolean(document.querySelector('#backup-conflict:not([hidden]), #backup-dialog[open]'));
     for (const { control, disabled } of initialControls) {
       // Saving an already completed hairstyle remains available during loss.
-      control.disabled = disabled || !storageInitialized || (graphicsState !== 'ready' && control.id !== 'save');
+      const safeDuringLoss = control.id === 'save' || (backupAvailable && (control.id === 'backup-conflict' || Boolean(control.closest('#backup-dialog'))));
+      control.disabled = disabled || !storageInitialized || (graphicsState !== 'ready' && !safeDuringLoss) ||
+        (control.id === 'prepare-conflict-backup' && backupPreparing);
     }
   }
   syncControls();
   const storageWarning = document.querySelector<HTMLElement>('#storage-warning');
+  const backupButton = document.querySelector<HTMLButtonElement>('#backup-conflict');
   const renderWarning = document.querySelector<HTMLElement>('#render-warning');
   const contextWarning = document.querySelector<HTMLElement>('#context-warning');
   const contextWarningText = document.querySelector<HTMLElement>('#context-warning-text');
@@ -51,6 +57,12 @@ function startApp(): void {
     if (!storageWarning) return;
     storageWarning.textContent = message;
     storageWarning.hidden = false;
+    if (backupButton) backupButton.hidden = false;
+    syncControls();
+  }
+  function clearStorageWarning(): void {
+    if (storageWarning) storageWarning.hidden = true;
+    if (backupButton) backupButton.hidden = true;
   }
   const metrics = {
     selected: document.querySelector<HTMLElement>('#metric-selected'),
@@ -112,7 +124,7 @@ function startApp(): void {
       if (revision === saveQueue.revision) hasUnsavedChanges = !saved;
       if (!saved && storageProtected && storageConflict) showStorageWarning('無法確認舊版存檔與目前存檔是否一致，已暫停儲存以保護資料。');
       else if (!saved) showStorageWarning(storageConflict ? '另一個分頁已更新存檔；目前操作未儲存，讀取存檔會取代目前操作。' : '儲存失敗，現有操作可能未保存。');
-      else if (storageWarning && !storageProtected) storageWarning.hidden = true;
+      else if (!storageProtected) clearStorageWarning();
       return saved;
     });
   }
@@ -896,12 +908,84 @@ function startApp(): void {
   renderer.domElement.addEventListener('pointerleave', () => { if (!pointer) showCursor(undefined); });
   renderer.domElement.addEventListener('pointermove', (event) => { if (graphicsAvailable() && !pointer && tool !== 'rotate') showCursor(hitHair(event.clientX, event.clientY)); });
 
+  const backupDialog = document.querySelector<HTMLDialogElement>('#backup-dialog');
+  const prepareBackup = document.querySelector<HTMLButtonElement>('#prepare-conflict-backup');
+  const downloadBackup = document.querySelector<HTMLAnchorElement>('#download-conflict-backup');
+  const backupStatus = document.querySelector<HTMLElement>('#conflict-backup-status');
+  const backupError = document.querySelector<HTMLElement>('#conflict-backup-error');
+  let backupUrl: string | undefined;
+  let backupGeneration = 0;
+  function clearPreparedBackup(): void {
+    backupGeneration += 1;
+    backupPreparing = false;
+    if (prepareBackup) prepareBackup.disabled = false;
+    if (backupUrl) URL.revokeObjectURL(backupUrl);
+    backupUrl = undefined;
+    if (downloadBackup) { downloadBackup.hidden = true; downloadBackup.removeAttribute('href'); }
+    if (backupStatus) backupStatus.textContent = '';
+    if (backupError) { backupError.hidden = true; backupError.textContent = ''; }
+  }
+  backupButton?.addEventListener('click', () => {
+    if (!storageInitialized || !backupDialog || backupDialog.open) return;
+    cancelActiveGesture();
+    clearPreparedBackup();
+    if (typeof backupDialog.showModal === 'function') backupDialog.showModal();
+    else backupDialog.setAttribute('open', '');
+  });
+  document.querySelector<HTMLButtonElement>('#close-conflict-backup')?.addEventListener('click', () => {
+    // close events can be delayed; cancel this preparation immediately.
+    clearPreparedBackup();
+    if (typeof backupDialog?.close === 'function') backupDialog.close();
+    else backupDialog?.removeAttribute('open');
+  });
+  // A queued close event from a previous opening must not clear a newly
+  // reopened dialog or its in-flight preparation.
+  backupDialog?.addEventListener('close', () => { if (!backupDialog.open) clearPreparedBackup(); });
+  prepareBackup?.addEventListener('click', () => {
+    if (!backupDialog?.open || backupPreparing) return;
+    clearPreparedBackup();
+    const generation = backupGeneration;
+    backupPreparing = true;
+    prepareBackup.disabled = true;
+    if (backupStatus) backupStatus.textContent = '正在準備本機備份…';
+    void (async () => {
+      try {
+        await saveQueue.settled();
+        const revision = saveQueue.revision;
+        const dirty = hasUnsavedChanges;
+        const current = JSON.stringify(editor.exportHistory());
+        const backup = await readConflictBackup(dirty ? current : undefined);
+        if (generation !== backupGeneration || !backupDialog.open) return;
+        if (revision !== saveQueue.revision || dirty !== hasUnsavedChanges || current !== JSON.stringify(editor.exportHistory())) {
+          throw new Error('準備期間本頁髮型發生變更，請重試');
+        }
+        const file = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        backupUrl = URL.createObjectURL(file);
+        if (downloadBackup) { downloadBackup.href = backupUrl; downloadBackup.hidden = false; }
+        if (backupStatus) backupStatus.textContent = '備份已準備好，請按「下載備份」。';
+      } catch (error) {
+        if (generation !== backupGeneration || !backupDialog.open) return;
+        if (backupStatus) backupStatus.textContent = '';
+        if (backupError) {
+          backupError.textContent = error instanceof Error ? error.message : '無法準備本機備份，資料未作修改。';
+          backupError.hidden = false;
+        }
+      } finally {
+        if (generation === backupGeneration) {
+          backupPreparing = false;
+          prepareBackup.disabled = false;
+        }
+      }
+    })();
+  });
+
   const toolDrawer = document.querySelector<HTMLDialogElement>('#tool-drawer');
   // Context loss can become observable immediately before its event is delivered.
   // Do not accept an editing button click in that brief window either.
   document.addEventListener('click', (event) => {
     const control = event.target instanceof Element ? event.target.closest('button, input, select') : null;
-    if (control && control.id !== 'save' && !graphicsAvailable()) {
+    const safeDuringLoss = control?.id === 'save' || control?.id === 'backup-conflict' || Boolean(control?.closest('#backup-dialog'));
+    if (control && !safeDuringLoss && !graphicsAvailable()) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
@@ -988,7 +1072,7 @@ function startApp(): void {
         // Clear protection only after a validated snapshot has been accepted and
         // its matching storage token installed; rejected reads stay protected.
         storageProtected = false;
-        if (storageWarning) storageWarning.hidden = true;
+        clearStorageWarning();
         redraw();
         appStatus.textContent = '已讀取本機儲存與操作歷史';
       } finally {

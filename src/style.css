@@ -31,6 +31,8 @@ dialog { max-height: calc(100dvh - 28px); overflow-y: auto; width: min(calc(100%
 dialog::backdrop { background: #0009; }
 .drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .drawer-heading button { min-width: 64px; }
+.backup-download:not([hidden]) { display: inline-flex; min-height: 44px; align-items: center; margin: 8px 0 0 8px; padding: 0 12px; border-radius: 12px; color: #261b24; background: #ffccd8; font-weight: 800; text-decoration: none; }
+#conflict-backup-error { color: #ffb6b6; }
 .drawer-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .hint { display: none; }
 @media (min-width: 700px) { main { height: auto; min-height: 100dvh; padding: 30px 18px; overflow: visible; gap: 12px; } #stage { min-height: 480px; } .tools { grid-template-columns: repeat(4, 1fr); } .controls { grid-template-columns: repeat(4, 1fr); } #overlay { grid-template-columns: repeat(6, minmax(0, 1fr)); } .drawer-tools { grid-template-columns: repeat(4, minmax(0, 1fr)); } .hint { display: block; margin: 0 4px; color: #b9adbd; font-size: .78rem; line-height: 1.45; } }

@@ -24,7 +24,9 @@
     "check:multitouch-browser": "node Tools/multitouch-ownership-smoke.mjs",
     "check:offline-registration": "node Tools/offline-registration-smoke.mjs",
     "check:legacy-race": "node Tools/legacy-localstorage-race-smoke.mjs",
-    "check:legacy-insecure": "node Tools/legacy-insecure-smoke.mjs"
+    "check:legacy-insecure": "node Tools/legacy-insecure-smoke.mjs",
+    "check:conflict-backup": "node Tools/conflict-backup-smoke.mjs",
+    "check:conflict-backup-storage": "node Tools/conflict-backup-storage-smoke.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

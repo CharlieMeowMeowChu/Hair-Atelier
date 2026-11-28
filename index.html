@@ -63,6 +63,15 @@
           </select>
         </label>
       </dialog>
+      <dialog id="backup-dialog" aria-labelledby="backup-title">
+        <div class="drawer-heading"><strong id="backup-title">備份本機存檔</strong><button id="close-conflict-backup" class="secondary">關閉</button></div>
+        <p>備份會包含新版、舊版及本頁未儲存的操作。只會準備本機檔案，不會自動選擇或修改存檔。</p>
+        <p>本頁畫面如未成功讀取存檔，可能是預設樣板。備份反映準備時的資料。</p>
+        <p id="conflict-backup-status" aria-live="polite"></p>
+        <p id="conflict-backup-error" role="alert" hidden></p>
+        <button id="prepare-conflict-backup" class="secondary">準備備份</button>
+        <a id="download-conflict-backup" class="backup-download" download="hair-atelier-backup.json" hidden>下載備份</a>
+      </dialog>
       <label class="clipper-setting" for="clipper-length">電剪留髮 <output id="clipper-length-value">6 cm</output>
         <input id="clipper-length" type="range" min="1" max="20" value="6" step="1" />
       </label>
@@ -86,6 +95,7 @@
         <button id="load" class="secondary">讀取</button>
         <button id="front" class="secondary">回正面</button>
         <button id="reset" class="secondary">重設樣板</button>
+        <button id="backup-conflict" class="secondary" hidden>備份存檔</button>
       </nav>
       <p class="hint">旋轉：單指拖動，兩指縮放。選取：點按髮束切換群組。兩束綁：先選兩束或以上，按髮根位置分成左右組。剪刀／電剪：沿髮束拖動後放手。捲髮器／梳子：按住髮束拖動。分界：在頭皮區域水平拖動。</p>
     </main>
